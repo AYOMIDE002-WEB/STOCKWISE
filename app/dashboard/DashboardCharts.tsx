@@ -15,7 +15,7 @@ export default function DashboardCharts({
   return (
     <div className="grid md:grid-cols-2 gap-6">
       <div className="card">
-        <h2 className="font-semibold text-slate-700 mb-4">Revenue \u2014 Last 14 Days</h2>
+        <h2 className="font-semibold text-slate-700 mb-4">Revenue \- Last 14 Days</h2>
         <ResponsiveContainer width="100%" height={240}>
           <LineChart data={revenueData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
@@ -28,7 +28,7 @@ export default function DashboardCharts({
       </div>
 
       <div className="card">
-        <h2 className="font-semibold text-slate-700 mb-4">Top-Selling Products \u2014 Last 30 Days</h2>
+        <h2 className="font-semibold text-slate-700 mb-4">Top-Selling Products \- Last 30 Days</h2>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={topProducts} layout="vertical" margin={{ left: 24 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
