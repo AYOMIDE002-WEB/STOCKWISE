@@ -83,6 +83,8 @@ variables from Step 4 in the Vercel project settings.
 
 
 
+
+
 ## Upgrading an existing database to multi-item sales
 If you ran an earlier version of `schema.sql`, run
 `supabase/migration_multi_item_sales.sql` ONCE in the Supabase SQL Editor.
