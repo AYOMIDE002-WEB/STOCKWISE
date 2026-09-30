@@ -1,7 +1,7 @@
 {
   "name": "Stockwise - Business Manager",
   "short_name": "Stockwise",
-  "description": "Inventory, sales, and customer management for small businesses \- works offline.",
+  "description": "Inventory, sales, and customer management for small businesses - works offline.",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#f8fafc",

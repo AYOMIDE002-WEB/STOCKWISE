@@ -127,7 +127,7 @@ export default function SalesClient({
         estimated_total: cartTotal,
         created_at: new Date().toISOString(),
       });
-      setNotice("You're offline \- sale saved locally and will sync automatically once you're back online.");
+      setNotice("You're offline - sale saved locally and will sync automatically once you're back online.");
       setCart([]);
       setSubmitting(false);
       return;
