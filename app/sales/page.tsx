@@ -34,7 +34,7 @@ export default async function SalesPage() {
         <SalesClient
           products={products || []}
           customers={customers || []}
-          initialSales={sales || []}
+          initialSales={(sales || []) as any}
           userId={user.id}
         />
       </main>
