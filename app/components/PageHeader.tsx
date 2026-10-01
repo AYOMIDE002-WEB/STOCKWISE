@@ -18,7 +18,7 @@ export default function PageHeader({
   theme?: keyof typeof THEMES;
 }) {
   return (
-    <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${THEMES[theme]} p-6 mb-8 text-white shadow-lg`}>
+    <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${THEMES[theme]} p-4 md:p-6 mb-5 md:mb-8 text-white shadow-lg`}>
       <div className="absolute -right-6 -top-6 w-32 h-32 rounded-full bg-white/10" />
       <div className="absolute right-10 bottom-[-2rem] w-20 h-20 rounded-full bg-white/10" />
       <div className="relative flex items-center gap-4">
@@ -26,7 +26,7 @@ export default function PageHeader({
           {icon}
         </div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight">{title}</h1>
           <p className="text-white/80 text-sm mt-0.5">{subtitle}</p>
         </div>
       </div>

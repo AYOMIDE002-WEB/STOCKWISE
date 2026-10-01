@@ -19,7 +19,7 @@ export default async function ManageUsersPage() {
     return (
       <div className="flex">
         <Sidebar role={role} />
-        <main className="flex-1 p-8">
+        <main className="flex-1 min-w-0 p-4 pt-20 pb-24 md:p-8">
           <div className="bg-red-50 text-accent-danger text-sm rounded-lg px-4 py-3 max-w-md">
             Access denied. Manage Users is available to Admin accounts only.
           </div>
@@ -34,7 +34,7 @@ export default async function ManageUsersPage() {
   return (
     <div className="flex">
       <Sidebar role={role} />
-      <main className="relative flex-1 p-8 max-w-4xl">
+      <main className="relative flex-1 min-w-0 p-4 pt-20 pb-24 md:p-8 max-w-4xl">
         <DecorativeBlobs theme="slate" />
         <PageHeader icon={<ShieldIcon />} title="Manage Users" subtitle="Create and manage staff and admin accounts" theme="slate" />
         <ManageUsersClient initialUsers={users || []} currentUserId={user.id} />

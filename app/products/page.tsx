@@ -21,7 +21,7 @@ export default async function ProductsPage() {
   return (
     <div className="flex">
       <Sidebar role={role} />
-      <main className="relative flex-1 p-8 max-w-5xl">
+      <main className="relative flex-1 min-w-0 p-4 pt-20 pb-24 md:p-8 max-w-5xl">
         <DecorativeBlobs theme="teal" />
         <PageHeader icon={<BoxIcon />} title="Products" subtitle="Manage your inventory" theme="teal" />
         <ProductsClient initialProducts={products || []} isAdmin={role === "Admin"} />

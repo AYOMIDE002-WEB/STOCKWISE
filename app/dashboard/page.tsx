@@ -71,7 +71,7 @@ export default async function DashboardPage() {
   return (
     <div className="flex">
       <Sidebar role={role} />
-      <main className="relative flex-1 p-8 max-w-6xl">
+      <main className="relative flex-1 min-w-0 p-4 pt-20 pb-24 md:p-8 max-w-6xl">
         <DecorativeBlobs theme="blue" />
         <PageHeader
           icon={<DashboardIcon />}
@@ -135,7 +135,7 @@ function SummaryCard({ label, value, tone }: { label: string; value: string; ton
   return (
     <div className={`card border-l-4 ${borderColor}`}>
       <p className="text-xs text-slate-400">{label}</p>
-      <p className="text-2xl font-bold text-brand-600 mt-1">{value}</p>
+      <p className="text-xl md:text-2xl font-bold text-brand-600 mt-1 break-words">{value}</p>
     </div>
   );
 }

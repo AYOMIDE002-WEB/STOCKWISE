@@ -25,3 +25,23 @@ body {
 .input-field {
   @apply border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400;
 }
+
+html, body {
+  overflow-x: hidden;
+}
+
+@media (max-width: 767px) {
+  .card {
+    padding: 1rem;
+    overflow-x: auto;
+  }
+  .card table {
+    min-width: 32rem;
+  }
+  input, select, textarea {
+    font-size: 16px;
+  }
+  .btn-primary, .btn-secondary {
+    padding: 0.65rem 1rem;
+  }
+}

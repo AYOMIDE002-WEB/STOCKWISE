@@ -127,7 +127,7 @@ export default function SalesClient({
         estimated_total: cartTotal,
         created_at: new Date().toISOString(),
       });
-      setNotice("You're offline - sale saved locally and will sync automatically once you're back online.");
+      setNotice("You're offline \u2014 sale saved locally and will sync automatically once you're back online.");
       setCart([]);
       setSubmitting(false);
       return;
@@ -180,7 +180,7 @@ export default function SalesClient({
           <button type="submit" className="btn-secondary">+ Add to sale</button>
         </form>
 
-        <div className="mt-5 border border-slate-100 rounded-xl overflow-hidden">
+        <div className="mt-5 border border-slate-100 rounded-xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
               <tr className="text-left text-xs uppercase text-slate-400">

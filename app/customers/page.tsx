@@ -21,7 +21,7 @@ export default async function CustomersPage() {
   return (
     <div className="flex">
       <Sidebar role={role} />
-      <main className="relative flex-1 p-8 max-w-4xl">
+      <main className="relative flex-1 min-w-0 p-4 pt-20 pb-24 md:p-8 max-w-4xl">
         <DecorativeBlobs theme="violet" />
         <PageHeader icon={<UsersIcon />} title="Customers" subtitle="Manage customer records" theme="violet" />
         <CustomersClient initialCustomers={customers || []} />

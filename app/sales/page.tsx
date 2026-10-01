@@ -28,13 +28,13 @@ export default async function SalesPage() {
   return (
     <div className="flex">
       <Sidebar role={role} />
-      <main className="relative flex-1 p-8 max-w-5xl">
+      <main className="relative flex-1 min-w-0 p-4 pt-20 pb-24 md:p-8 max-w-5xl">
         <DecorativeBlobs theme="amber" />
         <PageHeader icon={<ReceiptIcon />} title="Sales" subtitle="Record and track sales transactions" theme="amber" />
         <SalesClient
           products={products || []}
           customers={customers || []}
-          initialSales={(sales as any) || []}
+          initialSales={sales || []}
           userId={user.id}
         />
       </main>
