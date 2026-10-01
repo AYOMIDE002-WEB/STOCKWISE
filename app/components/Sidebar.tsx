@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LayoutDashboard, Package, Receipt, Users, UserCog, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabaseClient";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: "\ud83d\udcca" },
-  { href: "/products", label: "Products", icon: "\ud83d\udce6" },
-  { href: "/sales", label: "Sales", icon: "\ud83e\uddfe" },
-  { href: "/customers", label: "Customers", icon: "\ud83d\udc65" },
+  { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
+  { href: "/products", label: "Products", Icon: Package },
+  { href: "/sales", label: "Sales", Icon: Receipt },
+  { href: "/customers", label: "Customers", Icon: Users },
 ];
 
 export default function Sidebar({ role }: { role: "Admin" | "Staff" }) {
@@ -36,7 +37,7 @@ export default function Sidebar({ role }: { role: "Admin" | "Staff" }) {
   }
 
   const items = role === "Admin"
-    ? [...NAV_ITEMS, { href: "/manage-users", label: "Manage Users", icon: "\ud83d\udd10" }]
+    ? [...NAV_ITEMS, { href: "/manage-users", label: "Manage Users", Icon: UserCog }]
     : NAV_ITEMS;
 
   return (
@@ -61,7 +62,7 @@ export default function Sidebar({ role }: { role: "Admin" | "Staff" }) {
                   : "text-brand-100 hover:bg-white/10 hover:text-white"
               }`}
             >
-              <span>{item.icon}</span>
+              <item.Icon size={18} />
               {item.label}
             </Link>
           ))}
@@ -71,7 +72,7 @@ export default function Sidebar({ role }: { role: "Admin" | "Staff" }) {
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-brand-100 hover:bg-white/10 hover:text-white transition-colors"
           >
-            <span>{"\ud83d\udeaa"}</span> Logout
+            <LogOut size={18} /> Logout
           </button>
         </div>
       </aside>
@@ -100,7 +101,7 @@ export default function Sidebar({ role }: { role: "Admin" | "Staff" }) {
               pathname === item.href ? "text-brand-600" : "text-slate-500"
             }`}
           >
-            <span className="text-lg leading-none">{item.icon}</span>
+            <item.Icon size={22} />
             <span className="mt-0.5">{item.label === "Manage Users" ? "Users" : item.label}</span>
           </Link>
         ))}
