@@ -36,7 +36,8 @@ create table if not exists products (
     id uuid default gen_random_uuid() primary key,
     product_name text not null,
     category text,
-    quantity_in_stock integer not null default 0,
+    quantity_in_stock numeric(12,3) not null default 0,
+    unit text not null default 'unit',
     unit_price numeric(12,2) not null,
     created_at timestamptz default now()
 );
@@ -73,7 +74,7 @@ create table if not exists sale_items (
     id uuid default gen_random_uuid() primary key,
     sale_id uuid references sales(id) on delete cascade not null,
     product_id uuid references products(id) not null,
-    quantity integer not null,
+    quantity numeric(12,3) not null,
     unit_price numeric(12,2) not null,
     subtotal numeric(12,2) not null
 );
@@ -162,9 +163,9 @@ as $$
 declare
     v_item jsonb;
     v_product_id uuid;
-    v_quantity integer;
+    v_quantity numeric;
     v_unit_price numeric(12,2);
-    v_stock integer;
+    v_stock numeric;
     v_subtotal numeric(12,2);
     v_grand_total numeric(12,2) := 0;
     v_sale_id uuid;
@@ -178,7 +179,7 @@ begin
     for v_item in select * from jsonb_array_elements(p_items)
     loop
         v_product_id := (v_item->>'product_id')::uuid;
-        v_quantity := (v_item->>'quantity')::integer;
+        v_quantity := round((v_item->>'quantity')::numeric, 3);
 
         if v_quantity <= 0 then
             raise exception 'Quantity must be greater than zero for every item';
@@ -196,7 +197,7 @@ begin
             raise exception 'Insufficient stock for product %: only % units available', v_product_id, v_stock;
         end if;
 
-        v_grand_total := v_grand_total + (v_unit_price * v_quantity);
+        v_grand_total := v_grand_total + round(v_unit_price * v_quantity, 2);
     end loop;
 
     -- Second pass: everything validated, now actually record it
@@ -207,10 +208,10 @@ begin
     for v_item in select * from jsonb_array_elements(p_items)
     loop
         v_product_id := (v_item->>'product_id')::uuid;
-        v_quantity := (v_item->>'quantity')::integer;
+        v_quantity := round((v_item->>'quantity')::numeric, 3);
 
         select unit_price into v_unit_price from products where id = v_product_id;
-        v_subtotal := v_unit_price * v_quantity;
+        v_subtotal := round(v_unit_price * v_quantity, 2);
 
         insert into sale_items (sale_id, product_id, quantity, unit_price, subtotal)
         values (v_sale_id, v_product_id, v_quantity, v_unit_price, v_subtotal);
@@ -225,17 +226,7 @@ $$;
 
 grant execute on function record_sale_cart(uuid, jsonb) to authenticated;
 
--- ---------------------------------------------------------
--- Sample seed data (optional - remove before production use)
--- ---------------------------------------------------------
-insert into products (product_name, category, quantity_in_stock, unit_price) values
-('Bag of Rice (50kg)', 'Groceries', 18, 32500.00),
-('Cooking Oil (5L)', 'Groceries', 7, 7500.00),
-('Detergent (1kg)', 'Household', 4, 1500.00),
-('Bottled Water (Carton)', 'Beverages', 32, 1500.00)
-on conflict do nothing;
-
-insert into customers (customer_name, phone_number, address) values
-('Chidinma Eze', '0803 555 1234', '14 Adeola Street, Lagos'),
-('Tunde Bakare', '0806 222 9087', '5 Market Road, Lagos')
-on conflict do nothing;
+-- Sample data for demos is kept in separate files:
+--   sample_data_pharmacy.sql
+--   sample_data_electronics.sql
+-- Run ONE of them after this schema if you want a demo catalogue.

@@ -8,14 +8,16 @@ import { queueSale, syncQueuedSales } from "@/lib/offlineQueue";
 
 const InvoiceDownloadButton = dynamic(() => import("../invoices/InvoiceDownloadButton"), { ssr: false });
 
-type Product = { id: string; product_name: string; unit_price: number; quantity_in_stock: number };
+const fmtQty = (n: number) => Number(Number(n).toFixed(3)).toString();
+
+type Product = { id: string; product_name: string; unit_price: number; quantity_in_stock: number; unit?: string | null };
 type Customer = { id: string; customer_name: string };
 type SaleItemRow = {
   id: string;
   quantity: number;
   unit_price: number;
   subtotal: number;
-  products: { product_name: string } | null;
+  products: { product_name: string; unit?: string | null } | null;
 };
 type SaleRow = {
   id: string;
@@ -28,7 +30,7 @@ type SaleRow = {
 type CartLine = { product_id: string; quantity: number };
 
 const SALES_SELECT =
-  "id, total_amount, sale_date, customer_id, customers(customer_name), sale_items(id, quantity, unit_price, subtotal, products(product_name))";
+  "id, total_amount, sale_date, customer_id, customers(customer_name), sale_items(id, quantity, unit_price, subtotal, products(product_name, unit))";
 
 export default function SalesClient({
   products: initialProducts,
@@ -59,7 +61,7 @@ export default function SalesClient({
   async function refresh() {
     const [{ data: s }, { data: p }] = await Promise.all([
       supabase.from("sales").select(SALES_SELECT).order("sale_date", { ascending: false }).limit(50),
-      supabase.from("products").select("id, product_name, unit_price, quantity_in_stock").order("product_name"),
+      supabase.from("products").select("id, product_name, unit_price, quantity_in_stock, unit").order("product_name"),
     ]);
     if (s) setSales(s as any);
     if (p) setProducts(p);
@@ -93,20 +95,20 @@ export default function SalesClient({
     setError("");
     const qty = Number(pickQty);
     const product = productById(pickProductId);
-    if (!product || !Number.isInteger(qty) || qty <= 0) {
-      setError("Choose a product and a whole-number quantity greater than zero.");
+    if (!product || !Number.isFinite(qty) || qty <= 0) {
+      setError("Choose a product and a quantity greater than zero.");
       return;
     }
     // Merge with an existing line for the same product, and check total against stock
     const existing = cart.find((l) => l.product_id === pickProductId);
-    const newQty = (existing?.quantity || 0) + qty;
+    const newQty = Math.round(((existing?.quantity || 0) + qty) * 1000) / 1000;
     if (newQty > product.quantity_in_stock) {
-      setError(`Only ${product.quantity_in_stock} of "${product.product_name}" in stock.`);
+      setError(`Only ${fmtQty(product.quantity_in_stock)} ${product.unit || "unit"} of "${product.product_name}" in stock.`);
       return;
     }
     setCart(existing
       ? cart.map((l) => (l.product_id === pickProductId ? { ...l, quantity: newQty } : l))
-      : [...cart, { product_id: pickProductId, quantity: qty }]);
+      : [...cart, { product_id: pickProductId, quantity: Math.round(qty * 1000) / 1000 }]);
     setPickQty("1");
   }
 
@@ -167,15 +169,20 @@ export default function SalesClient({
             <label className="text-xs font-medium text-slate-500">Product</label>
             <select className="input-field w-full mt-1" value={pickProductId} onChange={(e) => setPickProductId(e.target.value)}>
               {products.map((p) => (
-                <option key={p.id} value={p.id} disabled={p.quantity_in_stock === 0}>
-                  {p.product_name} (&#8358;{p.unit_price.toLocaleString()} | {p.quantity_in_stock} in stock)
+                <option key={p.id} value={p.id} disabled={Number(p.quantity_in_stock) <= 0}>
+                  {p.product_name} (&#8358;{p.unit_price.toLocaleString()} | {fmtQty(p.quantity_in_stock)} {p.unit || "unit"} in stock)
                 </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-500">Qty</label>
-            <input type="number" min={1} className="input-field w-24 mt-1 block" value={pickQty} onChange={(e) => setPickQty(e.target.value)} />
+            <label className="text-xs font-medium text-slate-500">Qty{productById(pickProductId)?.unit ? ` (${productById(pickProductId)?.unit})` : ""}</label>
+            <input type="number" min={0} step="any" className="input-field w-24 mt-1 block" value={pickQty} onChange={(e) => setPickQty(e.target.value)} />
+            <div className="flex gap-1 mt-1">
+              {["0.5", "1", "2"].map((v) => (
+                <button key={v} type="button" onClick={() => setPickQty(v)} className="text-xs px-2 py-0.5 rounded border border-slate-200 text-slate-500">{v === "0.5" ? "\u00bd" : v}</button>
+              ))}
+            </div>
           </div>
           <button type="submit" className="btn-secondary">+ Add to sale</button>
         </form>
@@ -194,9 +201,9 @@ export default function SalesClient({
                 return (
                   <tr key={l.product_id} className="border-t border-slate-100">
                     <td className="px-3 py-2">{p?.product_name}</td>
-                    <td className="px-3 py-2">{l.quantity}</td>
+                    <td className="px-3 py-2">{fmtQty(l.quantity)} {p?.unit || ""}</td>
                     <td className="px-3 py-2">&#8358;{(p?.unit_price || 0).toLocaleString()}</td>
-                    <td className="px-3 py-2">&#8358;{((p?.unit_price || 0) * l.quantity).toLocaleString()}</td>
+                    <td className="px-3 py-2">&#8358;{(Math.round((p?.unit_price || 0) * l.quantity * 100) / 100).toLocaleString()}</td>
                     <td className="px-3 py-2 text-right">
                       <button onClick={() => removeFromCart(l.product_id)} className="text-accent-danger text-xs">Remove</button>
                     </td>
@@ -231,7 +238,7 @@ export default function SalesClient({
           </thead>
           <tbody>
             {sales.map((s) => {
-              const itemCount = s.sale_items.reduce((n, i) => n + i.quantity, 0);
+              const itemCount = Number(s.sale_items.reduce((n, i) => n + Number(i.quantity), 0).toFixed(3));
               const isOpen = expanded === s.id;
               return (
                 <Fragment key={s.id}>
@@ -252,7 +259,8 @@ export default function SalesClient({
                           customerName: s.customers?.customer_name || "Walk-in Customer",
                           items: s.sale_items.map((i) => ({
                             productName: i.products?.product_name || "",
-                            quantity: i.quantity,
+                            quantity: Number(i.quantity),
+                            unit: i.products?.unit || "",
                             unitPrice: Number(i.unit_price),
                             subtotal: Number(i.subtotal),
                           })),
@@ -267,7 +275,7 @@ export default function SalesClient({
                         <ul className="text-xs text-slate-600 space-y-1">
                           {s.sale_items.map((i) => (
                             <li key={i.id} className="flex justify-between max-w-md">
-                              <span>{i.products?.product_name} &times; {i.quantity}</span>
+                              <span>{i.products?.product_name} &times; {fmtQty(i.quantity)} {i.products?.unit || ""}</span>
                               <span>&#8358;{Number(i.subtotal).toLocaleString()}</span>
                             </li>
                           ))}

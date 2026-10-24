@@ -1,5 +1,6 @@
 "use client";
 
+import { Boxes } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
@@ -30,14 +31,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-white to-violet-50 px-4">
+    <div className="relative min-h-screen flex items-center justify-center px-4">
       <WatermarkBackground />
 
-      <div className="relative z-10 w-full max-w-sm p-[2px] rounded-2xl bg-gradient-to-br from-brand-400 via-violet-300 to-amber-300 shadow-xl shadow-brand-900/10">
-        <div className="bg-gradient-to-br from-white via-white to-brand-50/60 rounded-[calc(1rem-2px)] p-8">
+      <div className="relative z-10 w-full max-w-sm">
+        <div className="card !p-8 !bg-white/[0.6] !rounded-3xl">
           <div className="flex flex-col items-center mb-2">
             <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-brand-500 to-violet-500 flex items-center justify-center text-white font-bold text-xl mb-3 shadow-lg shadow-brand-500/30">
-              S
+              <Boxes size={28} />
             </div>
             <h1 className="text-2xl font-bold bg-gradient-to-r from-brand-600 to-violet-600 bg-clip-text text-transparent tracking-tight">
               Stockwise

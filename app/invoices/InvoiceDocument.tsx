@@ -24,6 +24,7 @@ const styles = StyleSheet.create({
 export type InvoiceLineItem = {
   productName: string;
   quantity: number;
+  unit?: string;
   unitPrice: number;
   subtotal: number;
 };
@@ -66,7 +67,7 @@ export default function InvoiceDocument({ data }: { data: InvoiceData }) {
           {data.items.map((item, i) => (
             <View style={styles.row} key={i} wrap={false}>
               <Text style={styles.cellWide}>{item.productName}</Text>
-              <Text style={styles.cell}>{item.quantity}</Text>
+              <Text style={styles.cell}>{String(Number(Number(item.quantity).toFixed(3))) + (item.unit ? " " + item.unit : "")}</Text>
               <Text style={styles.cell}>{"\u20a6" + item.unitPrice.toLocaleString()}</Text>
               <Text style={styles.cell}>{"\u20a6" + item.subtotal.toLocaleString()}</Text>
             </View>

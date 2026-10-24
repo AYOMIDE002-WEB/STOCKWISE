@@ -16,11 +16,11 @@ export default async function SalesPage() {
   const role = (profile?.role as "Admin" | "Staff") || "Staff";
 
   const [{ data: products }, { data: customers }, { data: sales }] = await Promise.all([
-    supabase.from("products").select("id, product_name, unit_price, quantity_in_stock").order("product_name"),
+    supabase.from("products").select("id, product_name, unit_price, quantity_in_stock, unit").order("product_name"),
     supabase.from("customers").select("id, customer_name").order("customer_name"),
     supabase
       .from("sales")
-      .select("id, total_amount, sale_date, customer_id, customers(customer_name), sale_items(id, quantity, unit_price, subtotal, products(product_name))")
+      .select("id, total_amount, sale_date, customer_id, customers(customer_name), sale_items(id, quantity, unit_price, subtotal, products(product_name, unit))")
       .order("sale_date", { ascending: false })
       .limit(50),
   ]);

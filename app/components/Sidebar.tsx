@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Package, Receipt, Users, UserCog, LogOut } from "lucide-react";
+import { LayoutDashboard, Package, Receipt, Users, UserCog, LogOut, Boxes } from "lucide-react";
 import { createClient } from "@/lib/supabaseClient";
 
 const NAV_ITEMS = [
@@ -42,12 +42,17 @@ export default function Sidebar({ role }: { role: "Admin" | "Staff" }) {
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-60 shrink-0 bg-brand-600 text-white min-h-screen flex-col">
-        <div className="px-6 py-6">
-          <span className="text-xl font-bold tracking-tight">Stockwise</span>
-          <div className={`mt-2 inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full ${isOnline ? "bg-white/10 text-brand-100" : "bg-amber-400/90 text-amber-950"}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-emerald-400" : "bg-amber-800"}`} />
+      {/* Desktop glass sidebar */}
+      <aside className="hidden md:flex w-64 shrink-0 flex-col sticky top-3 self-start h-[calc(100vh-1.5rem)] m-3 mr-0 rounded-2xl bg-white/[0.45] backdrop-blur-2xl border border-white/70 shadow-glass">
+        <div className="px-5 py-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-violet-500 text-white flex items-center justify-center shadow-md shadow-brand-500/30">
+              <Boxes size={22} />
+            </div>
+            <span className="text-xl font-bold tracking-tight text-slate-800">Stockwise</span>
+          </div>
+          <div className={`mt-4 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${isOnline ? "bg-emerald-100/70 text-emerald-700 border-emerald-200/70" : "bg-amber-100/80 text-amber-800 border-amber-200"}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-emerald-500" : "bg-amber-600"}`} />
             {isOnline ? "Online" : "Offline mode"}
           </div>
         </div>
@@ -56,10 +61,10 @@ export default function Sidebar({ role }: { role: "Admin" | "Staff" }) {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 pathname === item.href
-                  ? "bg-white/15 text-white"
-                  : "text-brand-100 hover:bg-white/10 hover:text-white"
+                  ? "bg-white/80 text-brand-700 shadow-sm border border-white"
+                  : "text-slate-600 hover:bg-white/50 hover:text-slate-900 border border-transparent"
               }`}
             >
               <item.Icon size={18} />
@@ -67,32 +72,35 @@ export default function Sidebar({ role }: { role: "Admin" | "Staff" }) {
             </Link>
           ))}
         </nav>
-        <div className="px-3 pb-6">
+        <div className="px-3 pb-5">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-brand-100 hover:bg-white/10 hover:text-white transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-white/50 hover:text-slate-900 transition-colors"
           >
             <LogOut size={18} /> Logout
           </button>
         </div>
       </aside>
 
-      {/* Mobile top bar */}
-      <header className="md:hidden fixed top-0 inset-x-0 z-40 bg-brand-600 text-white flex items-center justify-between px-4 h-14 shadow">
+      {/* Mobile glass top bar */}
+      <header className="md:hidden fixed top-0 inset-x-0 z-40 bg-white/60 backdrop-blur-xl border-b border-white/70 text-slate-800 flex items-center justify-between px-4 h-14 shadow-sm">
         <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-violet-500 text-white flex items-center justify-center">
+            <Boxes size={18} />
+          </div>
           <span className="text-lg font-bold tracking-tight">Stockwise</span>
-          <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full ${isOnline ? "bg-white/10 text-brand-100" : "bg-amber-400/90 text-amber-950"}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-emerald-400" : "bg-amber-800"}`} />
+          <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${isOnline ? "bg-emerald-100/70 text-emerald-700 border-emerald-200/70" : "bg-amber-100/80 text-amber-800 border-amber-200"}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-emerald-500" : "bg-amber-600"}`} />
             {isOnline ? "Online" : "Offline"}
           </span>
         </div>
-        <button onClick={handleLogout} className="text-sm font-medium text-brand-100 px-2 py-1">
-          Logout
+        <button onClick={handleLogout} className="flex items-center gap-1 text-sm font-medium text-slate-600 px-2 py-1">
+          <LogOut size={16} /> Logout
         </button>
       </header>
 
-      {/* Mobile bottom navigation */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 flex justify-around">
+      {/* Mobile glass bottom navigation */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/60 backdrop-blur-xl border-t border-white/70 flex justify-around">
         {items.map((item) => (
           <Link
             key={item.href}
@@ -101,7 +109,9 @@ export default function Sidebar({ role }: { role: "Admin" | "Staff" }) {
               pathname === item.href ? "text-brand-600" : "text-slate-500"
             }`}
           >
-            <item.Icon size={22} />
+            <span className={`px-3 py-1 rounded-full ${pathname === item.href ? "bg-white/80 shadow-sm" : ""}`}>
+              <item.Icon size={20} />
+            </span>
             <span className="mt-0.5">{item.label === "Manage Users" ? "Users" : item.label}</span>
           </Link>
         ))}

@@ -8,16 +8,16 @@ module.exports = {
     extend: {
       colors: {
         brand: {
-          50: "#eef5fb",
-          100: "#d6e7f5",
-          200: "#adcfeb",
-          300: "#7cb0dc",
-          400: "#4a8dc9",
-          500: "#2E75B6",
-          600: "#1F4E79",
-          700: "#193f61",
-          800: "#153349",
-          900: "#112a3a",
+          50: "#eef1ff",
+          100: "#dfe4ff",
+          200: "#c2caff",
+          300: "#9aa6ff",
+          400: "#7280f7",
+          500: "#5560ee",
+          600: "#4147d6",
+          700: "#3438ae",
+          800: "#2c3189",
+          900: "#262a6b",
         },
         accent: {
           success: "#2e8b57",
@@ -30,6 +30,7 @@ module.exports = {
       },
       boxShadow: {
         card: "0 2px 10px rgba(16, 42, 67, 0.06)",
+        glass: "0 8px 32px rgba(49, 46, 129, 0.14)",
       },
       keyframes: {
         "float-up": {

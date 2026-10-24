@@ -60,11 +60,11 @@ export default async function DashboardPage() {
   salesRows.forEach((s: any) => {
     (s.sale_items || []).forEach((item: any) => {
       const name = item.products?.product_name || "Unknown";
-      productTotals[name] = (productTotals[name] || 0) + item.quantity;
+      productTotals[name] = (productTotals[name] || 0) + Number(item.quantity);
     });
   });
   const topProductsData = Object.entries(productTotals)
-    .map(([name, qty]) => ({ name, qty }))
+    .map(([name, qty]) => ({ name, qty: Math.round(qty * 100) / 100 }))
     .sort((a, b) => b.qty - a.qty)
     .slice(0, 5);
 
@@ -113,7 +113,7 @@ export default async function DashboardPage() {
                     {(s.sale_items || []).length > 2 ? ` +${s.sale_items.length - 2} more` : ""}
                   </td>
                   <td className="py-2">{s.customers?.customer_name || "Walk-in"}</td>
-                  <td className="py-2">{(s.sale_items || []).reduce((n: number, i: any) => n + i.quantity, 0)}</td>
+                  <td className="py-2">{Number((s.sale_items || []).reduce((n: number, i: any) => n + Number(i.quantity), 0).toFixed(3))}</td>
                   <td className="py-2">&#8358;{Number(s.total_amount).toLocaleString()}</td>
                   <td className="py-2 text-slate-500">{dayjs(s.sale_date).format("D MMM, h:mm A")}</td>
                 </tr>

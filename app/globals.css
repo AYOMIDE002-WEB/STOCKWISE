@@ -4,30 +4,55 @@
 
 html, body {
   height: 100%;
+  overflow-x: hidden;
 }
 
 body {
-  @apply bg-slate-50 text-slate-800;
+  @apply text-slate-800;
+  background: #eef1ff;
+}
+
+/* Glassmorphic mesh background: static gradients, cheap to paint */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(48rem 36rem at 8% 6%, rgba(99, 102, 241, 0.38), transparent 60%),
+    radial-gradient(44rem 34rem at 92% 10%, rgba(20, 184, 166, 0.30), transparent 60%),
+    radial-gradient(46rem 36rem at 88% 92%, rgba(236, 72, 153, 0.24), transparent 60%),
+    radial-gradient(40rem 32rem at 6% 90%, rgba(56, 189, 248, 0.30), transparent 60%);
 }
 
 .card {
-  @apply bg-white rounded-xl shadow-card p-6;
+  @apply bg-white/[0.55] backdrop-blur-xl border border-white/70 rounded-2xl shadow-glass p-6;
 }
 
 .btn-primary {
-  @apply bg-brand-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-brand-700 transition-colors;
+  @apply bg-gradient-to-br from-brand-500 to-violet-600 text-white px-4 py-2 rounded-xl font-medium shadow-md shadow-brand-500/25 hover:brightness-110 active:scale-[0.98] transition;
 }
 
 .btn-secondary {
-  @apply bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 transition-colors;
+  @apply bg-white/50 backdrop-blur border border-white/80 text-slate-700 px-4 py-2 rounded-xl font-medium hover:bg-white/80 transition;
 }
 
 .input-field {
-  @apply border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400;
+  @apply bg-white/70 border border-white/80 rounded-xl px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-400/70 focus:bg-white/90 transition;
 }
 
-html, body {
-  overflow-x: hidden;
+/* Make older solid-colour utilities blend into the glass cards */
+.card .bg-slate-50,
+.card .bg-slate-100 {
+  background-color: rgba(255, 255, 255, 0.4);
+}
+.card table tr,
+.card table thead tr {
+  border-color: rgba(100, 116, 139, 0.18);
+}
+.card hr {
+  border-color: rgba(100, 116, 139, 0.18);
 }
 
 @media (max-width: 767px) {

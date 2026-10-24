@@ -4,8 +4,11 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import Badge from "../components/Badge";
 
+const fmtQty = (n: number) => Number(Number(n).toFixed(3)).toString();
+
 type Product = {
   id: string;
+  unit: string | null;
   product_name: string;
   category: string | null;
   quantity_in_stock: number;
@@ -22,7 +25,7 @@ export default function ProductsClient({
   const supabase = createClient();
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [editing, setEditing] = useState<Product | null>(null);
-  const [form, setForm] = useState({ product_name: "", category: "", quantity_in_stock: "", unit_price: "" });
+  const [form, setForm] = useState({ product_name: "", category: "", quantity_in_stock: "", unit_price: "", unit: "" });
   const [restockQty, setRestockQty] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
 
@@ -39,9 +42,10 @@ export default function ProductsClient({
       category: form.category,
       quantity_in_stock: Number(form.quantity_in_stock),
       unit_price: Number(form.unit_price),
+      unit: form.unit.trim() || "unit",
     });
     if (error) { setError(error.message); return; }
-    setForm({ product_name: "", category: "", quantity_in_stock: "", unit_price: "" });
+    setForm({ product_name: "", category: "", quantity_in_stock: "", unit_price: "", unit: "" });
     refresh();
   }
 
@@ -54,11 +58,12 @@ export default function ProductsClient({
         product_name: form.product_name,
         category: form.category,
         unit_price: Number(form.unit_price),
+        unit: form.unit.trim() || "unit",
       })
       .eq("id", editing.id);
     if (error) { setError(error.message); return; }
     setEditing(null);
-    setForm({ product_name: "", category: "", quantity_in_stock: "", unit_price: "" });
+    setForm({ product_name: "", category: "", quantity_in_stock: "", unit_price: "", unit: "" });
     refresh();
   }
 
@@ -69,7 +74,7 @@ export default function ProductsClient({
     if (!product) return;
     const { error } = await supabase
       .from("products")
-      .update({ quantity_in_stock: product.quantity_in_stock + qty })
+      .update({ quantity_in_stock: Math.round((Number(product.quantity_in_stock) + qty) * 1000) / 1000 })
       .eq("id", id);
     if (error) { setError(error.message); return; }
     setRestockQty((prev) => ({ ...prev, [id]: "" }));
@@ -90,7 +95,7 @@ export default function ProductsClient({
 
   function startEdit(p: Product) {
     setEditing(p);
-    setForm({ product_name: p.product_name, category: p.category || "", quantity_in_stock: String(p.quantity_in_stock), unit_price: String(p.unit_price) });
+    setForm({ product_name: p.product_name, category: p.category || "", quantity_in_stock: String(p.quantity_in_stock), unit_price: String(p.unit_price), unit: p.unit || "" });
   }
 
   return (
@@ -106,14 +111,19 @@ export default function ProductsClient({
             <input placeholder="Category" className="input-field flex-1 min-w-[140px]"
               value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
             {!editing && (
-              <input required type="number" min={0} placeholder="Quantity" className="input-field w-32"
+              <input required type="number" min={0} step="any" placeholder="Quantity" className="input-field w-32"
                 value={form.quantity_in_stock} onChange={(e) => setForm({ ...form, quantity_in_stock: e.target.value })} />
             )}
-            <input required type="number" min={0} step="0.01" placeholder="Unit price" className="input-field w-32"
+            <input list="unit-options" placeholder="Unit (e.g. derica)" className="input-field w-40"
+              value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
+            <datalist id="unit-options">
+              {["unit", "derica", "half derica", "bag", "carton", "kg", "litre", "pack", "piece", "tin", "cup"].map((u) => <option key={u} value={u} />)}
+            </datalist>
+            <input required type="number" min={0} step="0.01" placeholder="Price per unit" className="input-field w-32"
               value={form.unit_price} onChange={(e) => setForm({ ...form, unit_price: e.target.value })} />
             <button type="submit" className="btn-primary">{editing ? "Save Changes" : "Add Product"}</button>
             {editing && (
-              <button type="button" onClick={() => { setEditing(null); setForm({ product_name: "", category: "", quantity_in_stock: "", unit_price: "" }); }} className="btn-secondary">
+              <button type="button" onClick={() => { setEditing(null); setForm({ product_name: "", category: "", quantity_in_stock: "", unit_price: "", unit: "" }); }} className="btn-secondary">
                 Cancel
               </button>
             )}
@@ -143,16 +153,16 @@ export default function ProductsClient({
                 <td className="py-2">{p.category}</td>
                 <td className="py-2">
                   {p.quantity_in_stock < 10 ? (
-                    <Badge tone="low">{p.quantity_in_stock} left</Badge>
+                    <Badge tone="low">{fmtQty(p.quantity_in_stock)} {p.unit || "unit"} left</Badge>
                   ) : (
-                    <Badge tone="ok">{p.quantity_in_stock} in stock</Badge>
+                    <Badge tone="ok">{fmtQty(p.quantity_in_stock)} {p.unit || "unit"} in stock</Badge>
                   )}
                 </td>
-                <td className="py-2">&#8358;{Number(p.unit_price).toLocaleString()}</td>
+                <td className="py-2">&#8358;{Number(p.unit_price).toLocaleString()} <span className="text-xs text-slate-400">/ {p.unit || "unit"}</span></td>
                 {isAdmin && (
                   <td className="py-2">
                     <div className="flex gap-2">
-                      <input type="number" min={1} placeholder="Qty" className="input-field w-16 py-1"
+                      <input type="number" min={0} step="any" placeholder="Qty" className="input-field w-20 py-1"
                         value={restockQty[p.id] || ""} onChange={(e) => setRestockQty((prev) => ({ ...prev, [p.id]: e.target.value }))} />
                       <button onClick={() => handleRestock(p.id)} className="text-xs bg-accent-success text-white px-2 py-1 rounded-lg">Restock</button>
                     </div>
