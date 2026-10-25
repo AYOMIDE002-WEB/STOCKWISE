@@ -27,6 +27,7 @@ export type Rules = {
   escalate_order_above: number;
   owner_phone: string | null;
   default_language: string;
+  payment_instructions?: string;
 };
 
 export type EngineResult = {
@@ -36,6 +37,7 @@ export type EngineResult = {
   action: "none" | "checkout" | "escalate";
   kind: "greeting" | "question" | "escalation" | "unanswered";
   needsOwner: boolean;
+  discount: number;
 };
 
 const UNIT_WORDS = new Set([
@@ -177,16 +179,19 @@ export function addLine(cart: CartLine[], p: Product, qty: number): { cart: Cart
 export const cartTotal = (cart: CartLine[]) =>
   Math.round(cart.reduce((s, l) => s + l.unit_price * l.quantity, 0) * 100) / 100;
 
+export const payable = (cart: CartLine[], discount: number) =>
+  Math.round(cartTotal(cart) * (1 - (discount || 0) / 100) * 100) / 100;
+
 export function greeting(rules: Rules) {
   return rules.away_mode
     ? "Welcome! The owner is away right now, but I'm the Stockwise assistant and I can help you find products and place an order. What are you looking for?"
     : "Welcome! I'm the Stockwise assistant. Tell me what you need, or tap a product, and I'll check what's available.";
 }
 
-export function respond(message: string, cart: CartLine[], products: Product[], rules: Rules): EngineResult {
+export function respond(message: string, cart: CartLine[], products: Product[], rules: Rules, discount = 0): EngineResult {
   const raw = message.trim();
   const text = norm(raw);
-  const base = { cart, matches: [] as Product[], action: "none" as const, kind: "question" as const, needsOwner: false };
+  const base = { cart, matches: [] as Product[], action: "none" as const, kind: "question" as const, needsOwner: false, discount };
   if (!text) return { ...base, reply: "I'm listening. What would you like?" };
 
   const has = (re: RegExp) => re.test(text);
@@ -195,18 +200,27 @@ export function respond(message: string, cart: CartLine[], products: Product[], 
     return { ...base, action: "escalate", kind: "escalation", needsOwner: true,
       reply: "I've let the owner know you need them. Please wait a moment, and I can keep taking your order meanwhile." };
   }
-  if (has(/\b(discount|reduce|reduction|cheaper|last price|bargain|knock off|less money)\b/)) {
-    const reply = rules.allow_discounts
-      ? `The owner allows discounts of up to ${rules.max_discount_percent}%. I've sent your request for approval.`
-      : "I can't change prices myself, but I've sent your request to the owner for approval.";
-    return { ...base, kind: "escalation", needsOwner: true, reply };
+  if (has(/\b(discount|reduce|reduction|cheaper|last price|bargain|knock off|less money|slash)\b/)) {
+    const max = Number(rules.max_discount_percent) || 0;
+    if (!rules.allow_discounts || max <= 0) {
+      return { ...base, kind: "escalation", needsOwner: true,
+        reply: "I'm not allowed to change prices myself, but I've sent your request to the owner." };
+    }
+    if (!cart.length) return { ...base, reply: "Add your items to the basket first, then ask me for a discount." };
+    if (discount >= max) {
+      return { ...base, kind: "escalation", needsOwner: true,
+        reply: `${discount}% off is the best I'm allowed to give. I've asked the owner if they can do more.` };
+    }
+    const next = discount === 0 ? Math.max(1, Math.floor(max / 2)) : max;
+    return { ...base, discount: next, kind: "question",
+      reply: `Okay, I can take ${next}% off your basket. Your new total is ${naira(payable(cart, next))}.` };
   }
   if (has(/\b(clear|cancel|empty|start over|remove all)\b/)) {
-    return { ...base, cart: [], reply: "Okay, I've cleared your basket. What would you like?" };
+    return { ...base, cart: [], discount: 0, reply: "Okay, I've cleared your basket. What would you like?" };
   }
   if (has(/\b(checkout|check out|pay|paying|done|finish|finished|complete|confirm|place order|send order|that is all|thats all|total)\b/)) {
     if (!cart.length) return { ...base, reply: "Your basket is empty. Tell me what you'd like to buy." };
-    return { ...base, action: "checkout", reply: `Your total is ${naira(cartTotal(cart))}. Please enter your details to place the order.` };
+    return { ...base, action: "checkout", reply: `Your total is ${naira(payable(cart, discount))}${discount ? " after " + discount + "% off" : ""}. Choose how you will pay to place the order.` };
   }
   if (has(/\b(open|close|closing|opening|hours|time)\b/) && !has(/\b(add|buy)\b/)) {
     return { ...base, reply: `Our opening hours are: ${rules.opening_hours}.` };
@@ -263,7 +277,7 @@ export function respond(message: string, cart: CartLine[], products: Product[], 
     }
   }
   const parts2: string[] = [];
-  if (added.length) parts2.push(`Added ${added.join(", ")}. Total so far ${naira(cartTotal(current))}.`);
+  if (added.length) parts2.push(`Added ${added.join(", ")}. Total so far ${naira(payable(current, discount))}.`);
   if (problems.length) parts2.push(problems.join(" "));
   if (ask.length) parts2.push("Which one do you mean? Tap the right one below.");
   if (added.length && !ask.length) parts2.push("Anything else, or say 'pay' to finish?");
@@ -276,7 +290,7 @@ export function respond(message: string, cart: CartLine[], products: Product[], 
     }
   }
   const unanswered = !added.length && !ask.length && problems.some((m) => m.startsWith("I couldn't find"));
-  return { cart: current, matches: ask.slice(0, 4), action: "none",
+  return { cart: current, matches: ask.slice(0, 4), action: "none", discount,
     kind: unanswered ? "unanswered" : "question", needsOwner: unanswered,
     reply: parts2.join(" ") || "Sorry, I didn't catch that." };
 }

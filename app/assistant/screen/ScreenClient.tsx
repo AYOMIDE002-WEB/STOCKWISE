@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Boxes, Mic, MicOff, Send, ShoppingBasket, Volume2, VolumeX, Plus, Minus, X, CheckCircle2, WifiOff, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabaseClient";
-import { respond, greeting, addLine, cartTotal, type CartLine, type Product, type Rules } from "@/lib/assistantEngine";
+import { respond, greeting, addLine, cartTotal, payable, type CartLine, type Product, type Rules } from "@/lib/assistantEngine";
 
 type Msg = { from: "bot" | "me"; text: string };
 type QItem = { type: "order" | "event"; payload: any };
@@ -29,6 +29,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
   const [started, setStarted] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [discount, setDiscount] = useState(0);
   const [matches, setMatches] = useState<Product[]>([]);
   const [input, setInput] = useState("");
   const [speak, setSpeak] = useState(true);
@@ -37,10 +38,10 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState(0);
   const [checkout, setCheckout] = useState(false);
-  const [form, setForm] = useState({ name: "", phone: "", save: false });
+  const [form, setForm] = useState({ name: "", phone: "", save: false, method: "counter" });
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ id: string; offline: boolean } | null>(null);
+  const [done, setDone] = useState<{ id: string; offline: boolean; amount: number; method: string } | null>(null);
   const recRef = useRef<any>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -120,9 +121,10 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
   function send(text: string) {
     const t = text.trim();
     if (!t) return;
-    const r = respond(t, cart, products, rules);
+    const r = respond(t, cart, products, rules, discount);
     setMsgs((m) => [...m, { from: "me", text: t }, { from: "bot", text: r.reply }]);
     setCart(r.cart);
+    setDiscount(r.discount);
     setMatches(r.matches);
     setInput("");
     say(r.reply);
@@ -132,7 +134,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
 
   function tapProduct(p: Product) {
     const res = addLine(cart, p, 1);
-    const reply = res.ok ? `Added ${res.msg}. Total so far ${naira(cartTotal(res.cart))}.` : res.msg;
+    const reply = res.ok ? `Added ${res.msg}. Total so far ${naira(payable(res.cart, discount))}.` : res.msg;
     setCart(res.cart);
     setMsgs((m) => [...m, { from: "me", text: p.product_name }, { from: "bot", text: reply }]);
     say(reply);
@@ -168,31 +170,34 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
     const payload = {
       cart: cart.map((l) => ({ product_id: l.product_id, quantity: l.quantity })),
       customer_name: form.name, customer_phone: form.phone, save_details: form.save,
+      discount_percent: discount, payment_method: form.method,
     };
     try {
       if (!navigator.onLine) throw new Error("offline");
       const res = await post("/api/assistant/checkout", payload);
       const data = await res.json().catch(() => ({}));
-      if (res.ok) { finish(String(data.orderId).slice(0, 6).toUpperCase(), false); return; }
+      if (res.ok) { finish(String(data.orderId).slice(0, 6).toUpperCase(), false, Number(data.total)); return; }
       if (res.status < 500) { setFormError(data.error || "Could not place the order."); setBusy(false); return; }
       throw new Error("server");
     } catch {
       saveQ([...loadQ(), { type: "order", payload }]);
       setPending(loadQ().length);
-      finish("OFFLINE", true);
+      finish("OFFLINE", true, payable(cart, discount));
     }
   }
 
-  function finish(id: string, offline: boolean) {
-    setBusy(false); setCheckout(false); setDone({ id, offline });
-    const m = offline ? "Your order is saved and will be sent to the shop as soon as the internet returns." : `Thank you! Your order number is ${id}. Please wait at the counter for confirmation.`;
+  function finish(id: string, offline: boolean, amount: number) {
+    setBusy(false); setCheckout(false); setDone({ id, offline, amount, method: form.method });
+    const how = form.method === "transfer" ? "by bank transfer" : "at the counter";
+    const m = offline ? "Your order is saved and will be sent to the shop as soon as the internet returns." : `Thank you! Your order number is ${id}. Please pay ${naira(amount)} ${how}. Your order is confirmed once the shop sees your payment.`;
     say(m);
     setTimeout(() => {
-      setDone(null); setCart([]); setMsgs([]); setMatches([]); setForm({ name: "", phone: "", save: false }); setStarted(false);
+      setDone(null); setCart([]); setDiscount(0); setMsgs([]); setMatches([]); setForm({ name: "", phone: "", save: false, method: "counter" }); setStarted(false);
     }, 20000);
   }
 
-  const total = cartTotal(cart);
+  const subtotal = cartTotal(cart);
+  const total = payable(cart, discount);
 
   // ---- start overlay (also unlocks speech in the browser)
   if (!started) {
@@ -293,6 +298,11 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
                 </div>
               ))}
             </div>
+            {discount > 0 && (
+              <div className="mt-3 text-sm flex justify-between text-slate-500">
+                <span>Subtotal {naira(subtotal)}</span><span className="text-emerald-600 font-medium">{discount}% off</span>
+              </div>
+            )}
             <div className="border-t border-slate-300/40 mt-3 pt-3 flex items-center justify-between">
               <span className="text-slate-600">Total</span>
               <span className="text-2xl font-bold text-brand-600">{naira(total)}</span>
@@ -311,7 +321,19 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
               <h2 className="text-lg font-semibold text-slate-800">Place your order</h2>
               <button onClick={() => setCheckout(false)} aria-label="Close"><X size={20} /></button>
             </div>
-            <p className="text-sm text-slate-600 mb-3">Total: <b>{naira(total)}</b>. Pay at the counter when the order is confirmed.</p>
+            <p className="text-sm text-slate-600 mb-3">Total: <b>{naira(total)}</b>{discount > 0 ? ` (after ${discount}% off)` : ""}</p>
+            <p className="text-xs font-medium text-slate-500 mb-1">How will you pay?</p>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {[{ k: "counter", l: "At the counter (cash / POS)" }, { k: "transfer", l: "Bank transfer" }].map((m) => (
+                <button type="button" key={m.k} onClick={() => setForm({ ...form, method: m.k })}
+                  className={`text-sm rounded-xl px-3 py-2 border ${form.method === m.k ? "bg-brand-500 text-white border-brand-500" : "bg-white/70 border-white text-slate-700"}`}>{m.l}</button>
+              ))}
+            </div>
+            {form.method === "transfer" && (
+              <p className="text-xs rounded-xl bg-white/70 border border-white p-3 mb-3 text-slate-700 whitespace-pre-line">
+                {rules.payment_instructions?.trim() || "Ask at the counter for the shop's account details."}
+              </p>
+            )}
             <div className="space-y-2">
               <input className="input-field w-full" placeholder="Your name (optional)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               <input className="input-field w-full" placeholder="Phone number (optional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
@@ -321,7 +343,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
               </label>
             </div>
             {formError && <p className="text-sm text-rose-600 mt-2">{formError}</p>}
-            <button className="btn-primary w-full mt-4 !py-3" disabled={busy} onClick={placeOrder}>{busy ? "Sending..." : "Confirm order"}</button>
+            <button className="btn-primary w-full mt-4 !py-3" disabled={busy} onClick={placeOrder}>{busy ? "Sending..." : "Place order"}</button>
           </div>
         </div>
       )}
@@ -333,7 +355,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
             <CheckCircle2 size={56} className="mx-auto text-emerald-500" />
             <h2 className="text-2xl font-bold text-slate-800 mt-3">{done.offline ? "Order saved" : "Order placed"}</h2>
             {!done.offline && <p className="text-3xl font-bold text-brand-600 mt-2">#{done.id}</p>}
-            <p className="text-slate-600 mt-2">{done.offline ? "It will be sent to the shop as soon as the internet returns." : "Please wait at the counter for confirmation."}</p>
+            <p className="text-slate-600 mt-2">{done.offline ? "It will be sent to the shop as soon as the internet returns." : `Please pay ${naira(done.amount)} ${done.method === "transfer" ? "by bank transfer" : "at the counter"}. The shop confirms your order once payment is seen.`}</p>
           </div>
         </div>
       )}

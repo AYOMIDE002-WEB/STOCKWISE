@@ -13,7 +13,7 @@ export default async function ScreenPage() {
 
   const fallback = {
     away_mode: false, opening_hours: "Mon-Sat 8am-8pm", allow_discounts: false, max_discount_percent: 0,
-    escalate_order_above: 50000, owner_phone: null, default_language: "English",
+    escalate_order_above: 50000, owner_phone: null, default_language: "English", payment_instructions: "",
   };
   return <ScreenClient initialProducts={(products as any) || []} initialRules={(rules as any) || fallback} />;
 }

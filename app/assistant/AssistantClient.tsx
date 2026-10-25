@@ -7,12 +7,12 @@ import Badge from "../components/Badge";
 
 type Rules = {
   away_mode: boolean; opening_hours: string; allow_discounts: boolean; max_discount_percent: number;
-  escalate_order_above: number; owner_phone: string | null; default_language: string;
+  escalate_order_above: number; owner_phone: string | null; default_language: string; payment_instructions: string;
 };
 type OrderItem = { id: string; product_id: string; quantity: number; unit_price: number; subtotal: number; products: { product_name: string; unit: string | null } | null };
 type Order = {
   id: string; created_at: string; customer_id: string | null; customer_name: string | null; customer_phone: string | null;
-  channel: string; status: string; total_amount: number; order_items: OrderItem[];
+  channel: string; status: string; total_amount: number; discount_percent: number; payment_method: string; order_items: OrderItem[];
 };
 type EventRow = { id: string; created_at: string; kind: string; customer_text: string | null; assistant_text: string | null; needs_owner: boolean; resolved: boolean };
 
@@ -63,7 +63,7 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
   async function completeAsSale(o: Order) {
     setNote(""); setBusy(o.id);
     const items = o.order_items.map((i) => ({ product_id: i.product_id, quantity: Number(i.quantity) }));
-    const { error } = await supabase.rpc("record_sale_cart", { p_customer_id: o.customer_id, p_items: items });
+    const { error } = await supabase.rpc("record_sale_cart", { p_customer_id: o.customer_id, p_items: items, p_discount_percent: Number(o.discount_percent || 0) });
     if (error) { setBusy(""); setNote("Could not complete: " + error.message); return; }
     await supabase.from("orders").update({ status: "fulfilled" }).eq("id", o.id);
     setBusy(""); setNote("Order completed and stock updated.");
@@ -152,6 +152,9 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
                   </div>
                   <span className="font-bold text-brand-600">{naira(o.total_amount)}</span>
                 </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Payment: {o.payment_method === "transfer" ? "Bank transfer" : "At the counter"}{Number(o.discount_percent) > 0 ? ` \u00b7 ${o.discount_percent}% discount applied` : ""}
+                </p>
                 <p className="text-sm text-slate-600 mt-1">
                   {o.customer_name || "Walk-in customer"}{o.customer_phone ? " \u00b7 " + o.customer_phone : ""}
                 </p>
@@ -215,6 +218,7 @@ function RulesForm({ rules, disabled, onSave }: { rules: Rules; disabled: boolea
     escalate_order_above: String(rules.escalate_order_above),
     owner_phone: rules.owner_phone || "",
     default_language: rules.default_language,
+    payment_instructions: rules.payment_instructions || "",
   });
   return (
     <form
@@ -225,7 +229,7 @@ function RulesForm({ rules, disabled, onSave }: { rules: Rules; disabled: boolea
           opening_hours: f.opening_hours, allow_discounts: f.allow_discounts,
           max_discount_percent: Number(f.max_discount_percent) || 0,
           escalate_order_above: Number(f.escalate_order_above) || 0,
-          owner_phone: f.owner_phone.trim() || null, default_language: f.default_language,
+          owner_phone: f.owner_phone.trim() || null, default_language: f.default_language, payment_instructions: f.payment_instructions.trim(),
         });
       }}
     >
@@ -249,6 +253,9 @@ function RulesForm({ rules, disabled, onSave }: { rules: Rules; disabled: boolea
       </label>
       <label className="text-sm text-slate-600">Maximum discount (%)
         <input type="number" min={0} max={100} className="input-field w-full mt-1" disabled={disabled || !f.allow_discounts} value={f.max_discount_percent} onChange={(e) => setF({ ...f, max_discount_percent: e.target.value })} />
+      </label>
+      <label className="text-sm text-slate-600 md:col-span-2">Bank transfer details shown to customers
+        <textarea rows={2} className="input-field w-full mt-1" disabled={disabled} placeholder="Bank, account number, account name" value={f.payment_instructions} onChange={(e) => setF({ ...f, payment_instructions: e.target.value })} />
       </label>
       <div className="md:col-span-2">
         <button className="btn-primary" disabled={disabled}>Save rules</button>

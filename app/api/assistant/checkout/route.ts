@@ -34,7 +34,11 @@ export async function POST(req: NextRequest) {
   }
   total = Math.round(total * 100) / 100;
 
-  const { data: rules } = await admin.from("shop_rules").select("escalate_order_above").eq("id", 1).single();
+  const { data: rules } = await admin.from("shop_rules").select("escalate_order_above, allow_discounts, max_discount_percent").eq("id", 1).single();
+  let discount = Number(b.discount_percent) || 0;
+  if (!rules?.allow_discounts || discount < 0 || discount > Number(rules?.max_discount_percent || 0)) discount = 0;
+  total = Math.round(total * (1 - discount / 100) * 100) / 100;
+  const paymentMethod = b.payment_method === "transfer" ? "transfer" : "counter";
   const needsOwner = total > Number(rules?.escalate_order_above ?? 50000);
 
   const name = String(b.customer_name || "").trim().slice(0, 80) || null;
@@ -52,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   const { data: order, error } = await admin.from("orders").insert({
     customer_id: customerId, customer_name: name, customer_phone: phone, channel: "in_shop",
-    status: needsOwner ? "needs_owner" : "pending", total_amount: total, note: b.note ? String(b.note).slice(0, 300) : null,
+    status: needsOwner ? "needs_owner" : "pending", total_amount: total, discount_percent: discount, payment_method: paymentMethod, note: b.note ? String(b.note).slice(0, 300) : null,
   }).select("id").single();
   if (error || !order) return NextResponse.json({ error: error?.message || "Could not save order" }, { status: 400 });
 
@@ -63,5 +67,5 @@ export async function POST(req: NextRequest) {
     needs_owner: needsOwner, order_id: order.id,
   });
 
-  return NextResponse.json({ orderId: order.id, status: needsOwner ? "needs_owner" : "pending", total });
+  return NextResponse.json({ orderId: order.id, status: needsOwner ? "needs_owner" : "pending", total, discount, paymentMethod });
 }
