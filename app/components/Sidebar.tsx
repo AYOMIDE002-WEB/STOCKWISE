@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Package, Receipt, Users, UserCog, LogOut, Boxes } from "lucide-react";
+import { LayoutDashboard, Package, Receipt, Users, UserCog, LogOut, Boxes, Bot } from "lucide-react";
 import { createClient } from "@/lib/supabaseClient";
 
 const NAV_ITEMS = [
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: "/products", label: "Products", Icon: Package },
   { href: "/sales", label: "Sales", Icon: Receipt },
   { href: "/customers", label: "Customers", Icon: Users },
+  { href: "/assistant", label: "Assistant", Icon: Bot },
 ];
 
 export default function Sidebar({ role }: { role: "Admin" | "Staff" }) {
