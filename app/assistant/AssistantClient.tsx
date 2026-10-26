@@ -30,6 +30,7 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
   const [justSaved, setJustSaved] = useState(false);
+  const [ai, setAi] = useState<boolean | null>(null);
   const isAdmin = role === "Admin";
 
   const load = useCallback(async () => {
@@ -53,6 +54,7 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
 
   useEffect(() => {
     load();
+    fetch("/api/assistant/chat").then((r) => r.json()).then((j) => setAi(!!j.configured)).catch(() => setAi(null));
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, [load]);
@@ -109,6 +111,11 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
           </div>
           <div>
             <h2 className="font-semibold text-slate-800">Away Mode is {rules.away_mode ? "ON" : "OFF"}</h2>
+            <p className="text-xs mt-1">
+              <span className={`inline-block px-2 py-0.5 rounded-full border ${ai ? "bg-violet-100/80 text-violet-700 border-violet-200" : "bg-amber-100/80 text-amber-800 border-amber-200"}`}>
+                {ai ? "AI brain: connected" : "AI brain: not connected (basic mode). Add ANTHROPIC_API_KEY in Vercel."}
+              </span>
+            </p>
             <p className="text-sm text-slate-500 mt-0.5">
               {rules.away_mode ? "The assistant is serving customers on the shop screen while you are away." : "Turn this on when you leave. The assistant tells customers the owner is away and handles their orders."}
             </p>

@@ -30,6 +30,8 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [discount, setDiscount] = useState(0);
+  const [aiOn, setAiOn] = useState(true);
+  const [thinking, setThinking] = useState(false);
   const [matches, setMatches] = useState<Product[]>([]);
   const [input, setInput] = useState("");
   const [speak, setSpeak] = useState(true);
@@ -118,18 +120,49 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
     logEvent("greeting", "", g, false);
   }
 
-  function send(text: string) {
+  async function send(text: string) {
     const t = text.trim();
-    if (!t) return;
-    const r = respond(t, cart, products, rules, discount);
-    setMsgs((m) => [...m, { from: "me", text: t }, { from: "bot", text: r.reply }]);
-    setCart(r.cart);
-    setDiscount(r.discount);
-    setMatches(r.matches);
+    if (!t || thinking) return;
+    const history = msgs.slice(-8);
+    setMsgs((m) => [...m, { from: "me", text: t }]);
     setInput("");
-    say(r.reply);
-    logEvent(r.kind, t, r.reply, r.needsOwner);
-    if (r.action === "checkout") setCheckout(true);
+    setThinking(true);
+    let usedAI = false;
+
+    // 1) the AI brain (needs internet and the API key)
+    if (navigator.onLine && aiOn) {
+      try {
+        const res = await post("/api/assistant/chat", {
+          message: t, discount, history,
+          cart: cart.map((l) => ({ product_id: l.product_id, quantity: l.quantity })),
+        });
+        if (res.ok) {
+          const r = await res.json();
+          setCart(r.cart);
+          setDiscount(r.discount);
+          setMatches(products.filter((p) => (r.show || []).includes(p.id)));
+          setMsgs((m) => [...m, { from: "bot", text: r.reply }]);
+          say(r.reply);
+          if (r.action === "checkout") setCheckout(true);
+          usedAI = true;
+        } else if (res.status === 503) {
+          setAiOn(false);
+        }
+      } catch { /* fall back to the basic brain */ }
+    }
+
+    // 2) the basic rules brain (works offline, or when the AI is unavailable)
+    if (!usedAI) {
+      const r = respond(t, cart, products, rules, discount);
+      setMsgs((m) => [...m, { from: "bot", text: r.reply }]);
+      setCart(r.cart);
+      setDiscount(r.discount);
+      setMatches(r.matches);
+      say(r.reply);
+      logEvent(r.kind, t, r.reply, r.needsOwner);
+      if (r.action === "checkout") setCheckout(true);
+    }
+    setThinking(false);
   }
 
   function tapProduct(p: Product) {
@@ -228,6 +261,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            <span className={`text-xs px-2.5 py-1 rounded-full border ${online && aiOn ? "bg-violet-100/80 text-violet-700 border-violet-200" : "bg-white/60 text-slate-600 border-white"}`}>{online && aiOn ? "AI on" : "Basic mode"}</span>
             {!online && <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1"><WifiOff size={12} /> Offline{pending ? ` \u00b7 ${pending} waiting` : ""}</span>}
             {online && pending > 0 && <span className="text-xs px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-100">Sending {pending}...</span>}
             <select className="input-field !py-1.5 text-xs" value={lang} onChange={(e) => setLang(e.target.value)}>
@@ -274,7 +308,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
                 className={`rounded-xl px-4 flex items-center justify-center border ${listening ? "bg-rose-500 text-white border-rose-500 animate-pulse" : "bg-white/70 border-white text-slate-700"}`} title="Speak">
                 {listening ? <MicOff size={20} /> : <Mic size={20} />}
               </button>
-              <input className="input-field flex-1 !text-base" placeholder="Type or tap the mic and speak..." value={input} onChange={(e) => setInput(e.target.value)} />
+              <input className="input-field flex-1 !text-base" placeholder={thinking ? "Thinking..." : "Type or tap the mic and speak..."} value={input} onChange={(e) => setInput(e.target.value)} />
               <button className="btn-primary px-4" aria-label="Send"><Send size={18} /></button>
             </form>
           </section>
