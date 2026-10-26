@@ -29,6 +29,7 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
+  const [justSaved, setJustSaved] = useState(false);
   const isAdmin = role === "Admin";
 
   const load = useCallback(async () => {
@@ -45,6 +46,12 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
   }, [supabase]);
 
   useEffect(() => {
+    if (!note) return;
+    const t = setTimeout(() => setNote(""), 5000);
+    return () => clearTimeout(t);
+  }, [note]);
+
+  useEffect(() => {
     load();
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
@@ -57,7 +64,9 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
     setBusy("");
     if (error) { setNote("Could not save: " + error.message); return; }
     setRules({ ...rules, ...patch });
-    setNote("Saved.");
+    setNote("");
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 3000);
   }
 
   async function completeAsSale(o: Order) {
@@ -204,13 +213,13 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
       <div className="card">
         <h2 className="font-semibold text-slate-800 mb-1">Owner rules</h2>
         <p className="text-sm text-slate-500 mb-4">{isAdmin ? "These control what the assistant may do on its own." : "Only an Admin can change these."}</p>
-        <RulesForm rules={rules} disabled={!isAdmin || busy === "rules"} onSave={saveRules} />
+        <RulesForm rules={rules} disabled={!isAdmin || busy === "rules"} saved={justSaved} onSave={saveRules} />
       </div>
     </div>
   );
 }
 
-function RulesForm({ rules, disabled, onSave }: { rules: Rules; disabled: boolean; onSave: (p: Partial<Rules>) => void }) {
+function RulesForm({ rules, disabled, saved, onSave }: { rules: Rules; disabled: boolean; saved: boolean; onSave: (p: Partial<Rules>) => void }) {
   const [f, setF] = useState({
     opening_hours: rules.opening_hours,
     allow_discounts: rules.allow_discounts,
@@ -258,7 +267,7 @@ function RulesForm({ rules, disabled, onSave }: { rules: Rules; disabled: boolea
         <textarea rows={2} className="input-field w-full mt-1" disabled={disabled} placeholder="Bank, account number, account name" value={f.payment_instructions} onChange={(e) => setF({ ...f, payment_instructions: e.target.value })} />
       </label>
       <div className="md:col-span-2">
-        <button className="btn-primary" disabled={disabled}>Save rules</button>
+        <button className="btn-primary" disabled={disabled}>{saved ? "Saved \u2713" : "Save rules"}</button>
       </div>
     </form>
   );

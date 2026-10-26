@@ -67,6 +67,7 @@ const unitOf = (p: { unit: string | null }) => (p.unit && p.unit !== "unit" ? p.
 function norm(s: string) {
   return s
     .toLowerCase()
+    .replace(/['\u2019]/g, "")
     .replace(/[\u20a6,]/g, " ")
     .replace(/[^a-z0-9./\s]/g, " ")
     .replace(/(\d)([a-z])/g, "$1 $2")
@@ -128,7 +129,7 @@ function rank(q: string[], products: Product[]): Ranked[] {
   return products.map((p) => ({ p, s: score(q, p) })).filter((r) => r.s > 0).sort((a, b) => b.s - a.s);
 }
 
-type Segment = { qty: number; ranked: Ranked[]; text: string };
+type Segment = { qty: number; ranked: Ranked[]; text: string; units: string[] };
 
 function resolveSegment(seg: string, products: Product[]): Segment | null {
   const toks = norm(seg).split(" ").filter(Boolean);
@@ -147,7 +148,7 @@ function resolveSegment(seg: string, products: Product[]): Segment | null {
   const useB = (rB[0]?.s || 0) > (rA[0]?.s || 0) + 0.05;
   const ranked = useB ? rB : rA;
   if (!ranked.length) return null;
-  return { qty: useB ? 1 : qty ?? 1, ranked, text: seg };
+  return { qty: useB ? 1 : qty ?? 1, ranked, text: seg, units: toks.filter((t) => UNIT_WORDS.has(t)) };
 }
 
 function confident(r: Ranked[]) {
@@ -218,7 +219,28 @@ export function respond(message: string, cart: CartLine[], products: Product[], 
   if (has(/\b(clear|cancel|empty|start over|remove all)\b/)) {
     return { ...base, cart: [], discount: 0, reply: "Okay, I've cleared your basket. What would you like?" };
   }
-  if (has(/\b(checkout|check out|pay|paying|done|finish|finished|complete|confirm|place order|send order|that is all|thats all|total)\b/)) {
+  if (has(/\b(remove|delete|take out|no more|dont want|do not want)\b/)) {
+    const skip = new Set(["remove", "delete", "take", "out", "no", "more", "dont", "do", "not", "want", "from", "basket", "cart", "the", "my"]);
+    const q = text.split(" ").filter((t) => t && !skip.has(t) && !STOP.has(t) && toNum(t) === null);
+    const inCart = cart.map((l) => products.find((x) => x.id === l.product_id)).filter(Boolean) as Product[];
+    const rk = rank(q, inCart);
+    if (rk.length && rk[0].s >= 0.5) {
+      const gone = rk[0].p;
+      return { ...base, cart: cart.filter((l) => l.product_id !== gone.id),
+        reply: `Okay, I've removed ${gone.product_name}. Anything else?` };
+    }
+    return { ...base, reply: cart.length ? "Which item should I remove? Or say 'clear' to empty the basket." : "Your basket is empty." };
+  }
+  if (has(/\b(thanks|thank you|thank u|tanks|thx|nagode|daalu|ese)\b/)) {
+    return { ...base, reply: "You're welcome! Say 'pay' when you're ready, or tell me what else you need." };
+  }
+  if (has(/^(yes|yeah|yep|ok|okay|sure|alright|oya)( please| o)?$/)) {
+    return { ...base, reply: cart.length ? "Great. What else would you like? Say 'pay' when you're ready." : "Great. What would you like to buy?" };
+  }
+  if (has(/^(no|nope|nothing|nothing else|no more|bye|goodbye)( thanks| thank you)?$/)) {
+    return { ...base, reply: cart.length ? "Okay. Say 'pay' when you're ready to place your order." : "No problem. Let me know if you need anything." };
+  }
+  if (has(/\b(checkout|check out|pay|paying|done|finish|finished|complete|confirm|place order|send order|that is all|thats all|total|i am done|im done)\b/)) {
     if (!cart.length) return { ...base, reply: "Your basket is empty. Tell me what you'd like to buy." };
     return { ...base, action: "checkout", reply: `Your total is ${naira(payable(cart, discount))}${discount ? " after " + discount + "% off" : ""}. Choose how you will pay to place the order.` };
   }
@@ -228,7 +250,7 @@ export function respond(message: string, cart: CartLine[], products: Product[], 
   if (has(/^(hi|hello|hey|good (morning|afternoon|evening)|how far|howdy|sannu|bawo|ndewo|welcome)\b/) && text.split(" ").length <= 4) {
     return { ...base, kind: "greeting", reply: greeting(rules) };
   }
-  if (has(/\b(what do you (sell|have)|what.*available|menu|list|categories|catalog|catalogue|show me)\b/)) {
+  if (has(/\b(what do you (sell|have)|wetin (you|una) (get|sell)|what.*available|menu|list|categories|catalog|catalogue|show me)\b/)) {
     const cats = Array.from(new Set(products.map((p) => p.category).filter(Boolean))) as string[];
     return { ...base, matches: products.slice(0, 6),
       reply: cats.length ? `We have ${cats.slice(0, 8).join(", ")} and more. Tap a product below or tell me what you need.` : "Here are some of our products. Tap one or tell me what you need." };
@@ -267,7 +289,14 @@ export function respond(message: string, cart: CartLine[], products: Product[], 
   const ask: Product[] = [];
   for (const seg of segs) {
     if (confident(seg.ranked)) {
-      const res = addLine(current, seg.ranked[0].p, seg.qty);
+      const prod = seg.ranked[0].p;
+      const pu = unitOf(prod);
+      const mism = seg.units.find((u) => pu && !tokMatch(u, pu) && !productTokens(prod).some((x) => tokMatch(u, x)));
+      if (mism) {
+        problems.push(`${prod.product_name} is sold per ${pu}, not per ${mism}. Tell me how many ${pu} you want.`);
+        continue;
+      }
+      const res = addLine(current, prod, seg.qty);
       current = res.cart;
       (res.ok ? added : problems).push(res.msg);
     } else if (seg.ranked[0] && seg.ranked[0].s >= 0.35) {
@@ -281,7 +310,7 @@ export function respond(message: string, cart: CartLine[], products: Product[], 
   if (problems.length) parts2.push(problems.join(" "));
   if (ask.length) parts2.push("Which one do you mean? Tap the right one below.");
   if (added.length && !ask.length) parts2.push("Anything else, or say 'pay' to finish?");
-  if (!added.length && !ask.length && !orderVerb && segs.length) {
+  if (!added.length && !ask.length && !orderVerb && segs.length && !problems.length) {
     // Just a product name with no verb: show details
     const r = segs[0].ranked;
     if (confident(r)) {

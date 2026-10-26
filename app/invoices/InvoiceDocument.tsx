@@ -74,6 +74,23 @@ export default function InvoiceDocument({ data }: { data: InvoiceData }) {
           ))}
         </View>
 
+        {(() => {
+          const sum = data.items.reduce((t, i) => t + i.subtotal, 0);
+          const off = Math.round((sum - data.totalAmount) * 100) / 100;
+          if (off <= 0.005) return null;
+          return (
+            <View>
+              <View style={styles.totalRow}>
+                <Text style={{ fontSize: 11, marginRight: 12 }}>Subtotal</Text>
+                <Text style={{ fontSize: 11 }}>{"\u20a6" + sum.toLocaleString()}</Text>
+              </View>
+              <View style={styles.totalRow}>
+                <Text style={{ fontSize: 11, marginRight: 12 }}>Discount</Text>
+                <Text style={{ fontSize: 11 }}>{"-\u20a6" + off.toLocaleString()}</Text>
+              </View>
+            </View>
+          );
+        })()}
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalValue}>{"\u20a6" + data.totalAmount.toLocaleString()}</Text>

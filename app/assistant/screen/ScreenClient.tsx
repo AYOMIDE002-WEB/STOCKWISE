@@ -330,7 +330,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
               ))}
             </div>
             {form.method === "transfer" && (
-              <p className="text-xs rounded-xl bg-white/70 border border-white p-3 mb-3 text-slate-700 whitespace-pre-line">
+              <p className="text-sm rounded-xl bg-white/80 border border-white p-3 mb-3 text-slate-900 font-bold whitespace-pre-line">
                 {rules.payment_instructions?.trim() || "Ask at the counter for the shop's account details."}
               </p>
             )}
@@ -355,6 +355,11 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
             <CheckCircle2 size={56} className="mx-auto text-emerald-500" />
             <h2 className="text-2xl font-bold text-slate-800 mt-3">{done.offline ? "Order saved" : "Order placed"}</h2>
             {!done.offline && <p className="text-3xl font-bold text-brand-600 mt-2">#{done.id}</p>}
+            {!done.offline && done.method === "transfer" && (
+              <p className="text-sm rounded-xl bg-white/80 border border-white p-3 mt-3 text-slate-900 font-bold whitespace-pre-line text-left">
+                {rules.payment_instructions?.trim() || "Ask at the counter for the shop's account details."}
+              </p>
+            )}
             <p className="text-slate-600 mt-2">{done.offline ? "It will be sent to the shop as soon as the internet returns." : `Please pay ${naira(done.amount)} ${done.method === "transfer" ? "by bank transfer" : "at the counter"}. The shop confirms your order once payment is seen.`}</p>
           </div>
         </div>
