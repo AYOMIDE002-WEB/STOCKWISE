@@ -6,9 +6,22 @@ import type { CartLine, Product, Rules } from "@/lib/assistantEngine";
 
 export const maxDuration = 30;
 
-// Tells the owner page whether the AI key is configured.
+// Which AI service to use, based on the keys present in Vercel.
+function pickProvider(): "anthropic" | "gemini" | null {
+  const a = process.env.ANTHROPIC_API_KEY;
+  const g = process.env.GEMINI_API_KEY;
+  const want = (process.env.ASSISTANT_PROVIDER || "").toLowerCase();
+  if (want === "gemini" && g) return "gemini";
+  if (want === "anthropic" && a) return "anthropic";
+  if (a) return "anthropic";
+  if (g) return "gemini";
+  return null;
+}
+
+// Tells the owner page whether an AI key is configured, and which one.
 export async function GET() {
-  return NextResponse.json({ configured: !!process.env.ANTHROPIC_API_KEY });
+  const provider = pickProvider();
+  return NextResponse.json({ configured: !!provider, provider });
 }
 
 export async function POST(req: NextRequest) {
@@ -16,8 +29,8 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return NextResponse.json({ error: "no_key" }, { status: 503 });
+  const provider = pickProvider();
+  if (!provider) return NextResponse.json({ error: "no_key" }, { status: 503 });
 
   const body = await req.json();
   const message = String(body.message || "").trim().slice(0, 400);
@@ -77,23 +90,42 @@ export async function POST(req: NextRequest) {
   const timer = setTimeout(() => ctrl.abort(), 20000);
   let text = "";
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: process.env.ASSISTANT_MODEL || "claude-haiku-5-5", max_tokens: 500, system: prompt, messages }),
-      signal: ctrl.signal,
-    });
-    if (!res.ok) return NextResponse.json({ error: "ai_error", status: res.status }, { status: 502 });
-    const data = await res.json();
-    text = (data.content || []).map((c: any) => c.text || "").join("");
+    if (provider === "anthropic") {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": process.env.ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({ model: process.env.ASSISTANT_MODEL || "claude-haiku-5-5", max_tokens: 500, system: prompt, messages }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) return NextResponse.json({ error: "ai_error", provider, status: res.status, detail: (await res.text()).slice(0, 200) }, { status: 502 });
+      const data = await res.json();
+      text = (data.content || []).map((c: any) => c.text || "").join("");
+    } else {
+      const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+      const gen: any = { maxOutputTokens: 800, temperature: 0.3, responseMimeType: "application/json" };
+      if (model.includes("2.5-flash")) gen.thinkingConfig = { thinkingBudget: 0 };
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: "POST",
+        headers: { "x-goog-api-key": process.env.GEMINI_API_KEY!, "content-type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: prompt }] },
+          contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+          generationConfig: gen,
+        }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) return NextResponse.json({ error: "ai_error", provider, status: res.status, detail: (await res.text()).slice(0, 200) }, { status: 502 });
+      const data = await res.json();
+      text = (data.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || "").join("");
+    }
   } catch {
-    return NextResponse.json({ error: "ai_unreachable" }, { status: 502 });
+    return NextResponse.json({ error: "ai_unreachable", provider }, { status: 502 });
   } finally {
     clearTimeout(timer);
   }
 
   const out = parseModelJson(text);
-  if (!out) return NextResponse.json({ error: "bad_output" }, { status: 502 });
+  if (!out) return NextResponse.json({ error: "bad_output", provider }, { status: 502 });
 
   const r = applyActions(out, cart, discount, codeMap, rules);
   await admin.from("assistant_events").insert({
