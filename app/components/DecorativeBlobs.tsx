@@ -24,7 +24,7 @@ export default function DecorativeBlobs({ theme = "blue" }: { theme?: keyof type
   const t = THEMES[theme];
   const Mark = MARKS[theme];
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+    <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
       <div className={`absolute -top-20 -right-16 w-80 h-80 rounded-full ${t.a} opacity-30 blur-3xl`} />
       <div className={`absolute top-48 -left-24 w-72 h-72 rounded-full ${t.b} opacity-25 blur-3xl`} />
       <Mark className={`absolute -bottom-10 -right-6 w-72 h-72 ${t.icon} opacity-[0.12] rotate-[8deg]`} strokeWidth={0.75} />

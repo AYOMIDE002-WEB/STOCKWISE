@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabaseClient";
 import Badge from "../components/Badge";
 
 const fmtQty = (n: number) => Number(Number(n).toFixed(3)).toString();
+const uLabel = (u?: string | null) => (u && u !== "unit" ? " " + u : "");
 
 type Product = {
   id: string;
@@ -153,9 +154,9 @@ export default function ProductsClient({
                 <td className="py-2">{p.category}</td>
                 <td className="py-2">
                   {p.quantity_in_stock < 10 ? (
-                    <Badge tone="low">{fmtQty(p.quantity_in_stock)} {p.unit || "unit"} left</Badge>
+                    <Badge tone="low">{fmtQty(p.quantity_in_stock)}{uLabel(p.unit)} left</Badge>
                   ) : (
-                    <Badge tone="ok">{fmtQty(p.quantity_in_stock)} {p.unit || "unit"} in stock</Badge>
+                    <Badge tone="ok">{fmtQty(p.quantity_in_stock)}{uLabel(p.unit)} in stock</Badge>
                   )}
                 </td>
                 <td className="py-2">&#8358;{Number(p.unit_price).toLocaleString()} <span className="text-xs text-slate-400">/ {p.unit || "unit"}</span></td>

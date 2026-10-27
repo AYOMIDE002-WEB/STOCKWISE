@@ -74,7 +74,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input-field w-full mt-1"
-                placeholder="****************************************************************"
+                placeholder="Your password"
               />
             </div>
             <button

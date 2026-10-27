@@ -9,6 +9,7 @@ import { queueSale, syncQueuedSales } from "@/lib/offlineQueue";
 const InvoiceDownloadButton = dynamic(() => import("../invoices/InvoiceDownloadButton"), { ssr: false });
 
 const fmtQty = (n: number) => Number(Number(n).toFixed(3)).toString();
+const uLabel = (u?: string | null) => (u && u !== "unit" ? " " + u : "");
 
 type Product = { id: string; product_name: string; unit_price: number; quantity_in_stock: number; unit?: string | null };
 type Customer = { id: string; customer_name: string };
@@ -170,7 +171,7 @@ export default function SalesClient({
             <select className="input-field w-full mt-1" value={pickProductId} onChange={(e) => setPickProductId(e.target.value)}>
               {products.map((p) => (
                 <option key={p.id} value={p.id} disabled={Number(p.quantity_in_stock) <= 0}>
-                  {p.product_name} (&#8358;{p.unit_price.toLocaleString()} | {fmtQty(p.quantity_in_stock)} {p.unit || "unit"} in stock)
+                  {p.product_name} (&#8358;{p.unit_price.toLocaleString()} | {fmtQty(p.quantity_in_stock)}{uLabel(p.unit)} in stock)
                 </option>
               ))}
             </select>
