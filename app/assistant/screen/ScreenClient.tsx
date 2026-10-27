@@ -123,7 +123,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
     logEvent("greeting", "", g, false);
   }
 
-  async function send(text: string) {
+  async function send(text: string, alts: string[] = []) {
     const t = text.trim();
     if (!t || thinking) return;
     const history = msgs.slice(-8);
@@ -136,7 +136,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
     if (navigator.onLine && aiOn) {
       try {
         const res = await post("/api/assistant/chat", {
-          message: t, discount, history,
+          message: t, discount, history, alts,
           cart: cart.map((l) => ({ product_id: l.product_id, quantity: l.quantity })),
         });
         if (res.ok) {
@@ -156,7 +156,14 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
 
     // 2) the basic rules brain (works offline, or when the AI is unavailable)
     if (!usedAI) {
-      const r = respond(t, cart, products, rules, discount);
+      let r = respond(t, cart, products, rules, discount);
+      if (r.kind === "unanswered") {
+        // speech may have been misheard: try the other guesses before giving up
+        for (const a of alts) {
+          const r2 = respond(a, cart, products, rules, discount);
+          if (r2.kind !== "unanswered") { r = r2; break; }
+        }
+      }
       setMsgs((m) => [...m, { from: "bot", text: r.reply }]);
       setCart(r.cart);
       setDiscount(r.discount);
@@ -189,8 +196,11 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
     if (!SR) { setMsgs((m) => [...m, { from: "bot", text: "Voice isn't supported in this browser. Please use Chrome or Edge, or type below." }]); return; }
     if (listening) { recRef.current?.stop(); return; }
     const rec = new SR();
-    rec.lang = lang; rec.interimResults = false; rec.maxAlternatives = 1;
-    rec.onresult = (e: any) => send(e.results[0][0].transcript);
+    rec.lang = lang; rec.interimResults = false; rec.maxAlternatives = 3;
+    rec.onresult = (e: any) => {
+      const alts = Array.from(e.results[0] as ArrayLike<any>).map((a: any) => String(a.transcript));
+      send(alts[0], alts.slice(1));
+    };
     rec.onerror = () => setListening(false);
     rec.onend = () => setListening(false);
     recRef.current = rec;

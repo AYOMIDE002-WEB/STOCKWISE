@@ -81,7 +81,8 @@ export async function POST(req: NextRequest) {
   const cartText = cart.length
     ? cart.map((l) => `${l.quantity} ${l.unit} ${l.name}`).join("; ") + ` (discount ${discount}%)`
     : "empty";
-  const userTurn = `BASKET: ${cartText}\nCUSTOMER SAYS: ${message}`;
+  const alts = (Array.isArray(body.alts) ? body.alts : []).map((a: any) => String(a).slice(0, 200)).filter(Boolean).slice(0, 3);
+  const userTurn = `BASKET: ${cartText}\nCUSTOMER SAYS: ${message}` + (alts.length ? `\nHEARD ALTERNATIVES: ${alts.join(" | ")}` : "");
   const messages = hist.length && hist[hist.length - 1].role === "user"
     ? [...hist.slice(0, -1), { role: "user" as const, content: hist[hist.length - 1].content + "\n" + userTurn }]
     : [...hist, { role: "user" as const, content: userTurn }];

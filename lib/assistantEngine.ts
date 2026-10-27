@@ -53,19 +53,49 @@ const STOP = new Set([
   "much", "is", "are", "price", "prices", "cost", "do", "you", "have", "di", "de", "am",
   "wetin", "be", "e", "available", "in", "stock", "any", "to", "my", "it", "can", "could",
   "would", "like", "got", "with", "also", "more", "another", "per",
+  "mo", "fe", "ina", "so", "nko", "jowo", "biko", "nna", "oga",
 ]);
 
 const NUM_WORDS: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
   eleven: 11, twelve: 12, half: 0.5, quarter: 0.25,
+  // Yoruba
+  idaji: 0.5, kan: 1, meji: 2, meta: 3, merin: 4, marun: 5, mefa: 6,
+  // Hausa
+  rabi: 0.5, daya: 1, biyu: 2, uku: 3, hudu: 4, biyar: 5,
+  // Igbo
+  okara: 0.5, otu: 1, abuo: 2, ato: 3, ano: 4, ise: 5,
 };
 
 const naira = (n: number) => "\u20a6" + (Math.round(Number(n) * 100) / 100).toLocaleString("en-NG");
 const fmt = (n: number) => Number(Number(n).toFixed(3)).toString();
 const unitOf = (p: { unit: string | null }) => (p.unit && p.unit !== "unit" ? p.unit : "");
 
+// Common local words -> the English word shops usually use in their catalogue.
+const GLOSS: Record<string, string> = {
+  iresi: "rice", shinkafa: "rice", osikapa: "rice",
+  ewa: "beans", wake: "beans", agwa: "beans",
+  epo: "oil", mai: "oil", mman: "oil", mmanu: "oil",
+  suga: "sugar", sukari: "sugar", shuga: "sugar",
+  omi: "water", ruwa: "water", mmiri: "water",
+  iyo: "salt", gishiri: "salt", nnu: "salt",
+  ata: "pepper", alubosa: "onion", albasa: "onion",
+  eyin: "egg", kwai: "egg", akwa: "egg",
+  wara: "milk", madara: "milk", tumatir: "tomato", tomati: "tomato",
+  gaari: "garri", gari: "garri", buredi: "bread", burodi: "bread",
+};
+
+// Rough "sound" of a word, so "rise" ~ "rice" and "spageti" ~ "spaghetti".
+function phon(t: string) {
+  let x = t.toLowerCase().replace(/ph/g, "f").replace(/ck/g, "k").replace(/c(?=[eiy])/g, "s").replace(/[cq]/g, "k").replace(/z/g, "s").replace(/x/g, "ks").replace(/(.)\1+/g, "$1").replace(/h/g, "");
+  x = x[0] + x.slice(1).replace(/[aeiouy]/g, "");
+  return x;
+}
+
 function norm(s: string) {
   return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/['\u2019]/g, "")
     .replace(/[\u20a6,]/g, " ")
@@ -101,7 +131,9 @@ function tokMatch(a: string, b: string) {
   const sa = stem(a), sb = stem(b);
   if (sa === sb) return true;
   if (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) return true;
-  if (a.length >= 5 && b.length >= 5 && lev(sa, sb) <= 1) return true;
+  if (a.length >= 4 && b.length >= 4 && lev(sa, sb) <= 1) return true;
+  if (a.length >= 7 && b.length >= 7 && lev(sa, sb) <= 2) return true;
+  if (a.length >= 4 && b.length >= 4 && phon(sa) === phon(sb) && phon(sa).length >= 2) return true;
   return false;
 }
 
@@ -129,10 +161,10 @@ function rank(q: string[], products: Product[]): Ranked[] {
   return products.map((p) => ({ p, s: score(q, p) })).filter((r) => r.s > 0).sort((a, b) => b.s - a.s);
 }
 
-type Segment = { qty: number; ranked: Ranked[]; text: string; units: string[] };
+type Segment = { qty: number; ranked: Ranked[]; text: string; units: string[]; explicit: boolean };
 
 function resolveSegment(seg: string, products: Product[]): Segment | null {
-  const toks = norm(seg).split(" ").filter(Boolean);
+  const toks = norm(seg).split(" ").filter(Boolean).map((t) => GLOSS[t] || t);
   // Option A: first number is a quantity. Option B: numbers belong to the product name (e.g. 500mg).
   let qty: number | null = null;
   const restA: string[] = [];
@@ -148,7 +180,7 @@ function resolveSegment(seg: string, products: Product[]): Segment | null {
   const useB = (rB[0]?.s || 0) > (rA[0]?.s || 0) + 0.05;
   const ranked = useB ? rB : rA;
   if (!ranked.length) return null;
-  return { qty: useB ? 1 : qty ?? 1, ranked, text: seg, units: toks.filter((t) => UNIT_WORDS.has(t)) };
+  return { qty: useB ? 1 : qty ?? 1, ranked, text: seg, units: toks.filter((t) => UNIT_WORDS.has(t)), explicit: !useB && qty !== null };
 }
 
 function confident(r: Ranked[]) {
@@ -268,7 +300,8 @@ export function respond(message: string, cart: CartLine[], products: Product[], 
   }
 
   // Information request about one item
-  if (wantsInfo && !orderVerb) {
+  // A bare product name ("oil") shows details instead of silently adding it.
+  if ((wantsInfo || segs.every((sg) => !sg.explicit)) && !orderVerb) {
     const r = segs[0].ranked;
     if (confident(r)) {
       const p = r[0].p;
