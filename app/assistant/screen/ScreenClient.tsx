@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Boxes, Mic, MicOff, Send, ShoppingBasket, Volume2, VolumeX, Plus, Minus, X, CheckCircle2, WifiOff, ShieldCheck } from "lucide-react";
+import { Boxes, Mic, MicOff, Send, ShoppingBasket, Volume2, VolumeX, Plus, Minus, X, CheckCircle2, WifiOff, ShieldCheck, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabaseClient";
 import { respond, greeting, addLine, cartTotal, payable, type CartLine, type Product, type Rules } from "@/lib/assistantEngine";
 
@@ -32,6 +32,9 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
   const [discount, setDiscount] = useState(0);
   const [aiOn, setAiOn] = useState(true);
   const [thinking, setThinking] = useState(false);
+  const [exitOpen, setExitOpen] = useState(false);
+  const [pw, setPw] = useState("");
+  const [pwErr, setPwErr] = useState("");
   const [matches, setMatches] = useState<Product[]>([]);
   const [input, setInput] = useState("");
   const [speak, setSpeak] = useState(true);
@@ -229,6 +232,37 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
     }, 20000);
   }
 
+  async function ownerExit() {
+    setPwErr("");
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) { setPwErr("Please log in again."); return; }
+    const { error } = await supabase.auth.signInWithPassword({ email: user.email, password: pw });
+    if (error) { setPwErr("Wrong password."); return; }
+    window.location.href = "/assistant";
+  }
+
+  const exitUi = (
+    <>
+      <button onClick={() => { setExitOpen(true); setPw(""); setPwErr(""); }}
+        className="fixed bottom-3 right-3 z-40 w-9 h-9 rounded-full bg-white/60 border border-white text-slate-500 hover:text-slate-900 hover:bg-white flex items-center justify-center opacity-70 hover:opacity-100"
+        title="Owner exit" aria-label="Owner exit"><Lock size={16} /></button>
+      {exitOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/30 backdrop-blur-sm">
+          <form className="card !p-6 w-full max-w-sm !bg-white/85" onSubmit={(e) => { e.preventDefault(); ownerExit(); }}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-slate-800">Owner exit</h2>
+              <button type="button" onClick={() => setExitOpen(false)} aria-label="Close"><X size={20} /></button>
+            </div>
+            <p className="text-sm text-slate-600 mb-3">Enter your password to leave the customer screen.</p>
+            <input type="password" autoFocus className="input-field w-full" placeholder="Your password" value={pw} onChange={(e) => setPw(e.target.value)} />
+            {pwErr && <p className="text-sm text-rose-600 mt-2">{pwErr}</p>}
+            <button className="btn-primary w-full mt-3">Exit to dashboard</button>
+          </form>
+        </div>
+      )}
+    </>
+  );
+
   const subtotal = cartTotal(cart);
   const total = payable(cart, discount);
 
@@ -236,6 +270,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
   if (!started) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
+        {exitUi}
         <div className="card !p-10 max-w-lg w-full text-center">
           <div className="mx-auto w-20 h-20 rounded-3xl bg-gradient-to-br from-brand-500 to-violet-500 text-white flex items-center justify-center shadow-lg">
             <Boxes size={40} />
@@ -251,6 +286,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
 
   return (
     <div className="min-h-screen p-3 md:p-6">
+      {exitUi}
       <div className="max-w-6xl mx-auto">
         <header className="card !py-3 !px-4 flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">

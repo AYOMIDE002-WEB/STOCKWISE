@@ -128,8 +128,15 @@ export async function POST(req: NextRequest) {
   if (!out) return NextResponse.json({ error: "bad_output", provider }, { status: 502 });
 
   const r = applyActions(out, cart, discount, codeMap, rules);
+  let flag = r.needsOwner;
+  if (flag) {
+    const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { count } = await admin.from("assistant_events").select("id", { count: "exact", head: true })
+      .eq("customer_text", message.slice(0, 500)).eq("needs_owner", true).eq("resolved", false).gte("created_at", since);
+    if ((count || 0) > 0) flag = false;
+  }
   await admin.from("assistant_events").insert({
-    channel: "in_shop", kind: r.kind, customer_text: message.slice(0, 500), assistant_text: r.reply.slice(0, 800), needs_owner: r.needsOwner,
+    channel: "in_shop", kind: r.kind, customer_text: message.slice(0, 500), assistant_text: r.reply.slice(0, 800), needs_owner: flag,
   });
 
   return NextResponse.json({ reply: r.reply, cart: r.cart, discount: r.discount, action: r.action, show: r.showIds, needsOwner: r.needsOwner });

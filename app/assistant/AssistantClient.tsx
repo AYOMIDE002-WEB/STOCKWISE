@@ -59,16 +59,17 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
     return () => clearInterval(t);
   }, [load]);
 
-  async function saveRules(patch: Partial<Rules>) {
-    if (!rules) return;
+  async function saveRules(patch: Partial<Rules>): Promise<boolean> {
+    if (!rules) return false;
     setNote(""); setBusy("rules");
     const { error } = await supabase.from("shop_rules").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", 1);
     setBusy("");
-    if (error) { setNote("Could not save: " + error.message); return; }
+    if (error) { setNote("Could not save: " + error.message); return false; }
     setRules({ ...rules, ...patch });
     setNote("");
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 3000);
+    return true;
   }
 
   async function completeAsSale(o: Order) {
@@ -87,6 +88,13 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
     setBusy(""); load();
   }
 
+  async function resolveAll() {
+    const ids = attention.map((e) => e.id);
+    if (!ids.length) return;
+    await supabase.from("assistant_events").update({ resolved: true }).in("id", ids);
+    load();
+  }
+
   async function resolve(e: EventRow) {
     await supabase.from("assistant_events").update({ resolved: true }).eq("id", e.id);
     load();
@@ -96,7 +104,8 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
   if (!rules) return <div className="card text-sm text-slate-500">Loading...</div>;
 
   const open = orders.filter((o) => o.status === "pending" || o.status === "needs_owner" || o.status === "confirmed");
-  const attention = events.filter((e) => e.needs_owner && !e.resolved);
+  const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  const attention = events.filter((e) => e.needs_owner && !e.resolved && new Date(e.created_at).getTime() > weekAgo);
   const count = (k: string) => events.filter((e) => e.kind === k).length;
 
   return (
@@ -197,7 +206,10 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
 
       {/* Attention */}
       <div className="card">
-        <h2 className="font-semibold text-slate-800 flex items-center gap-2 mb-3"><MessageSquare size={18} /> Needs your attention</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold text-slate-800 flex items-center gap-2"><MessageSquare size={18} /> Needs your attention</h2>
+          {attention.length > 1 && <button className="btn-secondary !py-1 text-xs" onClick={resolveAll}>Mark all resolved</button>}
+        </div>
         {attention.length === 0 && <p className="text-sm text-slate-500">Nothing waiting. The assistant has handled everything it could.</p>}
         <div className="space-y-2">
           {attention.map((e) => (
@@ -226,56 +238,76 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
   );
 }
 
-function RulesForm({ rules, disabled, saved, onSave }: { rules: Rules; disabled: boolean; saved: boolean; onSave: (p: Partial<Rules>) => void }) {
-  const [f, setF] = useState({
-    opening_hours: rules.opening_hours,
-    allow_discounts: rules.allow_discounts,
-    max_discount_percent: String(rules.max_discount_percent),
-    escalate_order_above: String(rules.escalate_order_above),
-    owner_phone: rules.owner_phone || "",
-    default_language: rules.default_language,
-    payment_instructions: rules.payment_instructions || "",
-  });
+const EMPTY = { opening_hours: "", owner_phone: "", escalate_order_above: "", default_language: "", discounts: "", max_discount_percent: "", payment_instructions: "" };
+
+function RulesForm({ rules, disabled, saved, onSave }: { rules: Rules; disabled: boolean; saved: boolean; onSave: (p: Partial<Rules>) => Promise<boolean> }) {
+  const [f, setF] = useState(EMPTY);
+  const [msg, setMsg] = useState("");
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const patch: Partial<Rules> = {};
+    if (f.opening_hours.trim()) patch.opening_hours = f.opening_hours.trim();
+    if (f.owner_phone.trim()) patch.owner_phone = f.owner_phone.trim();
+    if (f.escalate_order_above.trim()) patch.escalate_order_above = Number(f.escalate_order_above) || 0;
+    if (f.default_language) patch.default_language = f.default_language;
+    if (f.discounts === "allow") patch.allow_discounts = true;
+    if (f.discounts === "deny") patch.allow_discounts = false;
+    if (f.max_discount_percent.trim()) patch.max_discount_percent = Math.min(100, Math.max(0, Number(f.max_discount_percent) || 0));
+    if (f.payment_instructions.trim()) patch.payment_instructions = f.payment_instructions.trim();
+    if (!Object.keys(patch).length) { setMsg("Nothing to change. Fill in only what you want to update."); return; }
+    setMsg("");
+    const ok = await onSave(patch);
+    if (ok) setF(EMPTY); // clear the form after a successful save
+  }
+
   return (
-    <form
-      className="grid md:grid-cols-2 gap-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSave({
-          opening_hours: f.opening_hours, allow_discounts: f.allow_discounts,
-          max_discount_percent: Number(f.max_discount_percent) || 0,
-          escalate_order_above: Number(f.escalate_order_above) || 0,
-          owner_phone: f.owner_phone.trim() || null, default_language: f.default_language, payment_instructions: f.payment_instructions.trim(),
-        });
-      }}
-    >
-      <label className="text-sm text-slate-600">Opening hours
-        <input className="input-field w-full mt-1" disabled={disabled} value={f.opening_hours} onChange={(e) => setF({ ...f, opening_hours: e.target.value })} />
-      </label>
-      <label className="text-sm text-slate-600">Owner phone (for alerts)
-        <input className="input-field w-full mt-1" disabled={disabled} value={f.owner_phone} onChange={(e) => setF({ ...f, owner_phone: e.target.value })} />
-      </label>
-      <label className="text-sm text-slate-600">Escalate orders above (&#8358;)
-        <input type="number" min={0} className="input-field w-full mt-1" disabled={disabled} value={f.escalate_order_above} onChange={(e) => setF({ ...f, escalate_order_above: e.target.value })} />
-      </label>
-      <label className="text-sm text-slate-600">Customer voice language
-        <select className="input-field w-full mt-1" disabled={disabled} value={f.default_language} onChange={(e) => setF({ ...f, default_language: e.target.value })}>
-          {["English", "Pidgin", "Yoruba", "Hausa", "Igbo"].map((l) => <option key={l}>{l}</option>)}
-        </select>
-      </label>
-      <label className="text-sm text-slate-600 flex items-center gap-2">
-        <input type="checkbox" disabled={disabled} checked={f.allow_discounts} onChange={(e) => setF({ ...f, allow_discounts: e.target.checked })} />
-        Allow discounts (still sent to you for approval)
-      </label>
-      <label className="text-sm text-slate-600">Maximum discount (%)
-        <input type="number" min={0} max={100} className="input-field w-full mt-1" disabled={disabled || !f.allow_discounts} value={f.max_discount_percent} onChange={(e) => setF({ ...f, max_discount_percent: e.target.value })} />
-      </label>
-      <label className="text-sm text-slate-600 md:col-span-2">Bank transfer details shown to customers
-        <textarea rows={2} className="input-field w-full mt-1" disabled={disabled} placeholder="Bank, account number, account name" value={f.payment_instructions} onChange={(e) => setF({ ...f, payment_instructions: e.target.value })} />
-      </label>
-      <div className="md:col-span-2">
-        <button className="btn-primary" disabled={disabled}>{saved ? "Saved \u2713" : "Save rules"}</button>
+    <div>
+      <div className="rounded-xl bg-white/50 border border-white/80 p-4 mb-4 text-sm text-slate-600 space-y-1">
+        <p className="font-medium text-slate-800 mb-1">Current rules</p>
+        <p>Opening hours: {rules.opening_hours}</p>
+        <p>Owner phone: {rules.owner_phone || "not set"}</p>
+        <p>Orders above &#8358;{Number(rules.escalate_order_above).toLocaleString()} go to you</p>
+        <p>Discounts: {rules.allow_discounts ? `allowed up to ${rules.max_discount_percent}%` : "not allowed"}</p>
+        <p>Voice language: {rules.default_language}</p>
+        <p>Bank transfer details:</p>
+        <p className="font-bold text-slate-900 whitespace-pre-line">{rules.payment_instructions?.trim() || "not set"}</p>
       </div>
-    </form>
+      <p className="text-xs text-slate-500 mb-3">Fill in only what you want to change. The form clears after saving, and empty boxes keep the current setting.</p>
+      <form className="grid md:grid-cols-2 gap-4" onSubmit={submit}>
+        <label className="text-sm text-slate-600">Opening hours
+          <input className="input-field w-full mt-1" disabled={disabled} placeholder={rules.opening_hours} value={f.opening_hours} onChange={(e) => setF({ ...f, opening_hours: e.target.value })} />
+        </label>
+        <label className="text-sm text-slate-600">Owner phone (for alerts)
+          <input className="input-field w-full mt-1" disabled={disabled} placeholder={rules.owner_phone || "e.g. 0803 000 0000"} value={f.owner_phone} onChange={(e) => setF({ ...f, owner_phone: e.target.value })} />
+        </label>
+        <label className="text-sm text-slate-600">Escalate orders above (&#8358;)
+          <input type="number" min={0} className="input-field w-full mt-1" disabled={disabled} placeholder={String(rules.escalate_order_above)} value={f.escalate_order_above} onChange={(e) => setF({ ...f, escalate_order_above: e.target.value })} />
+        </label>
+        <label className="text-sm text-slate-600">Customer voice language
+          <select className="input-field w-full mt-1" disabled={disabled} value={f.default_language} onChange={(e) => setF({ ...f, default_language: e.target.value })}>
+            <option value="">Keep current ({rules.default_language})</option>
+            {["English", "Pidgin", "Yoruba", "Hausa", "Igbo"].map((l) => <option key={l}>{l}</option>)}
+          </select>
+        </label>
+        <label className="text-sm text-slate-600">Discounts
+          <select className="input-field w-full mt-1" disabled={disabled} value={f.discounts} onChange={(e) => setF({ ...f, discounts: e.target.value })}>
+            <option value="">Keep current ({rules.allow_discounts ? "allowed" : "not allowed"})</option>
+            <option value="allow">Allow discounts</option>
+            <option value="deny">Do not allow discounts</option>
+          </select>
+        </label>
+        <label className="text-sm text-slate-600">Maximum discount (%)
+          <input type="number" min={0} max={100} className="input-field w-full mt-1" disabled={disabled} placeholder={String(rules.max_discount_percent)} value={f.max_discount_percent} onChange={(e) => setF({ ...f, max_discount_percent: e.target.value })} />
+        </label>
+        <label className="text-sm text-slate-600 md:col-span-2">Bank transfer details shown to customers
+          <textarea rows={2} className="input-field w-full mt-1" disabled={disabled} placeholder="Bank, account number, account name" value={f.payment_instructions} onChange={(e) => setF({ ...f, payment_instructions: e.target.value })} />
+        </label>
+        <div className="md:col-span-2 flex items-center gap-3 flex-wrap">
+          <button className="btn-primary" disabled={disabled}>{saved ? "Saved \u2713" : "Save rules"}</button>
+          {msg && <span className="text-sm text-amber-700">{msg}</span>}
+        </div>
+      </form>
+    </div>
   );
 }
