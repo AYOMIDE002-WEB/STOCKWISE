@@ -54,6 +54,7 @@ const STOP = new Set([
   "wetin", "be", "e", "available", "in", "stock", "any", "to", "my", "it", "can", "could",
   "would", "like", "got", "with", "also", "more", "another", "per",
   "mo", "fe", "ina", "so", "nko", "jowo", "biko", "nna", "oga",
+  "elo", "melo", "ni", "ne", "nawa", "ego", "ole",
 ]);
 
 const NUM_WORDS: Record<string, number> = {
@@ -233,7 +234,7 @@ export function respond(message: string, cart: CartLine[], products: Product[], 
     return { ...base, action: "escalate", kind: "escalation", needsOwner: true,
       reply: "I've let the owner know you need them. Please wait a moment, and I can keep taking your order meanwhile." };
   }
-  if (has(/\b(discount|reduce|reduction|cheaper|last price|bargain|knock off|less money|slash)\b/)) {
+  if (has(/\b(discount|reduce|reduction|cheaper|last price|bargain|knock off|less money|slash|edinwo|dinku|dinwo|wa le|rage|ragewa|belata)\b/)) {
     const max = Number(rules.max_discount_percent) || 0;
     if (!rules.allow_discounts || max <= 0) {
       return { ...base, kind: "escalation", needsOwner: true,
@@ -272,7 +273,7 @@ export function respond(message: string, cart: CartLine[], products: Product[], 
   if (has(/^(no|nope|nothing|nothing else|no more|bye|goodbye)( thanks| thank you)?$/)) {
     return { ...base, reply: cart.length ? "Okay. Say 'pay' when you're ready to place your order." : "No problem. Let me know if you need anything." };
   }
-  if (has(/\b(checkout|check out|pay|paying|done|finish|finished|complete|confirm|place order|send order|that is all|thats all|total|i am done|im done)\b/)) {
+  if (has(/\b(checkout|check out|pay|paying|done|finish|finished|complete|confirm|place order|send order|that is all|thats all|total|i am done|im done|sanwo|biya|kwuo ugwo|kwu ugwo|ugwo)\b/)) {
     if (!cart.length) return { ...base, reply: "Your basket is empty. Tell me what you'd like to buy." };
     return { ...base, action: "checkout", reply: `Your total is ${naira(payable(cart, discount))}${discount ? " after " + discount + "% off" : ""}. Choose how you will pay to place the order.` };
   }
@@ -292,7 +293,7 @@ export function respond(message: string, cart: CartLine[], products: Product[], 
   const parts = raw.split(/\s*(?:,|&|\+|\band\b|\bplus\b|\bwith\b)\s*/i).filter((s) => s.trim());
   const segs = parts.map((s) => resolveSegment(s, products)).filter(Boolean) as Segment[];
   const orderVerb = has(/\b(want|wan|give|buy|take|add|get|need|bring|order|abeg)\b/);
-  const wantsInfo = has(/\b(how much|price|cost|wetin|do you have|have you|available|in stock|you get|got any)\b/);
+  const wantsInfo = has(/\b(how much|price|cost|wetin|do you have|have you|available|in stock|you get|got any|elo ni|melo ni|nawa|ego ole|ole ego)\b/);
 
   if (!segs.length) {
     return { ...base, kind: "unanswered", needsOwner: true,

@@ -31,6 +31,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
   const [cart, setCart] = useState<CartLine[]>([]);
   const [discount, setDiscount] = useState(0);
   const [aiOn, setAiOn] = useState(true);
+  const [aiErr, setAiErr] = useState("");
   const [thinking, setThinking] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
   const [pw, setPw] = useState("");
@@ -148,8 +149,12 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
           say(r.reply);
           if (r.action === "checkout") setCheckout(true);
           usedAI = true;
+          setAiErr("");
         } else if (res.status === 503) {
           setAiOn(false);
+        } else {
+          const j = await res.json().catch(() => ({}));
+          setAiErr(`${j.error || "error"}${j.status ? " " + j.status : ""}`);
         }
       } catch { /* fall back to the basic brain */ }
     }
@@ -307,7 +312,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            <span className={`text-xs px-2.5 py-1 rounded-full border ${online && aiOn ? "bg-violet-100/80 text-violet-700 border-violet-200" : "bg-white/60 text-slate-600 border-white"}`}>{online && aiOn ? "AI on" : "Basic mode"}</span>
+            <span className={`text-xs px-2.5 py-1 rounded-full border ${online && aiOn ? "bg-violet-100/80 text-violet-700 border-violet-200" : "bg-white/60 text-slate-600 border-white"}`}>{online && aiOn ? (aiErr ? "AI problem: " + aiErr : "AI on") : "Basic mode"}</span>
             {!online && <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1"><WifiOff size={12} /> Offline{pending ? ` \u00b7 ${pending} waiting` : ""}</span>}
             {online && pending > 0 && <span className="text-xs px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-100">Sending {pending}...</span>}
             <select className="input-field !py-1.5 text-xs" value={lang} onChange={(e) => setLang(e.target.value)}>
