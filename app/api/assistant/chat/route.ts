@@ -6,6 +6,8 @@ import type { CartLine, Product, Rules } from "@/lib/assistantEngine";
 
 export const maxDuration = 30;
 
+let workingGeminiModel = ""; // remembered between requests on the same server instance
+
 // Which AI service to use, based on the keys present in Vercel.
 function pickProvider(): "anthropic" | "gemini" | null {
   const a = process.env.ANTHROPIC_API_KEY;
@@ -102,22 +104,40 @@ export async function POST(req: NextRequest) {
       const data = await res.json();
       text = (data.content || []).map((c: any) => c.text || "").join("");
     } else {
-      const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-      const gen: any = { maxOutputTokens: 800, temperature: 0.3, responseMimeType: "application/json" };
-      if (model.includes("2.5-flash")) gen.thinkingConfig = { thinkingBudget: 0 };
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        method: "POST",
-        headers: { "x-goog-api-key": process.env.GEMINI_API_KEY!, "content-type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: prompt }] },
-          contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
-          generationConfig: gen,
-        }),
-        signal: ctrl.signal,
-      });
-      if (!res.ok) return NextResponse.json({ error: "ai_error", provider, status: res.status, detail: (await res.text()).slice(0, 200) }, { status: 502 });
-      const data = await res.json();
-      text = (data.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || "").join("");
+      // Google retires Gemini models often, so try several names until one works.
+      const candidates = [process.env.GEMINI_MODEL, workingGeminiModel, "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-2.5-flash"]
+        .filter(Boolean) as string[];
+      const tried = new Set<string>();
+      let lastStatus = 0;
+      let lastDetail = "";
+      let ok = false;
+      for (const model of candidates) {
+        if (tried.has(model)) continue;
+        tried.add(model);
+        const gen: any = { maxOutputTokens: 1500, temperature: 0.3, responseMimeType: "application/json" };
+        if (model.includes("2.5-flash")) gen.thinkingConfig = { thinkingBudget: 0 };
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: "POST",
+          headers: { "x-goog-api-key": process.env.GEMINI_API_KEY!, "content-type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: prompt }] },
+            contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+            generationConfig: gen,
+          }),
+          signal: ctrl.signal,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          text = (data.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || "").join("");
+          workingGeminiModel = model;
+          ok = true;
+          break;
+        }
+        lastStatus = res.status;
+        lastDetail = (await res.text()).slice(0, 200);
+        if (res.status !== 404 && res.status !== 400) break; // only a retired/unknown model is worth retrying
+      }
+      if (!ok) return NextResponse.json({ error: "ai_error", provider, status: lastStatus, detail: lastDetail }, { status: 502 });
     }
   } catch {
     return NextResponse.json({ error: "ai_unreachable", provider }, { status: 502 });
