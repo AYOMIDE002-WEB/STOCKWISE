@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Boxes, Mic, MicOff, Send, ShoppingBasket, Volume2, VolumeX, Plus, Minus, X, CheckCircle2, WifiOff, ShieldCheck, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabaseClient";
+import { guessLang, cleanForSpeech } from "@/lib/speechHelpers";
 import { respond, greeting, addLine, cartTotal, payable, type CartLine, type Product, type Rules } from "@/lib/assistantEngine";
 
 type Msg = { from: "bot" | "me"; text: string };
@@ -51,13 +52,67 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
   const recRef = useRef<any>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
-  const say = useCallback((text: string) => {
-    if (!speak || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const srcRef = useRef<AudioBufferSourceNode | null>(null);
+
+  const browserSpeak = useCallback((text: string, code: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = lang;
+    if (code !== "en") {
+      const v = window.speechSynthesis.getVoices().find((x) => x.lang.toLowerCase().startsWith(code));
+      if (v) { u.voice = v; u.lang = v.lang; }
+    }
     window.speechSynthesis.speak(u);
-  }, [speak, lang]);
+  }, [lang]);
+
+  // Cloud voice (Gemini text-to-speech) for Yoruba, Hausa and Igbo, which browser voices cannot pronounce.
+  const playCloud = useCallback(async (text: string): Promise<boolean> => {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx) return false;
+      const res = await fetch("/api/assistant/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+      if (!res.ok) return false;
+      const j = await res.json();
+      const bin = atob(j.audio);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      let buffer: AudioBuffer;
+      if (/wav|wave/i.test(j.mime)) {
+        buffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
+      } else {
+        const rate = Number((/rate=(\d+)/.exec(j.mime) || [])[1]) || 24000;
+        const n = Math.floor(bytes.length / 2);
+        buffer = ctx.createBuffer(1, n, rate);
+        const ch = buffer.getChannelData(0);
+        const dv = new DataView(bytes.buffer);
+        for (let i = 0; i < n; i++) ch[i] = dv.getInt16(i * 2, true) / 32768;
+      }
+      try { srcRef.current?.stop(); } catch { /* nothing playing */ }
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      src.start();
+      srcRef.current = src;
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const say = useCallback((raw: string) => {
+    if (!speak || typeof window === "undefined") return;
+    const text = cleanForSpeech(raw);
+    const code = guessLang(text);
+    try { srcRef.current?.stop(); } catch { /* nothing playing */ }
+    window.speechSynthesis?.cancel();
+    if (code !== "en" && navigator.onLine) {
+      playCloud(text).then((ok) => { if (!ok) browserSpeak(text, code); });
+      return;
+    }
+    browserSpeak(text, code);
+  }, [speak, playCloud, browserSpeak]);
 
   const post = useCallback(async (url: string, payload: any) => {
     const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -116,6 +171,11 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
 
   function begin() {
+    try {
+      const AC = window.AudioContext || (window as any).webkitAudioContext;
+      if (AC && !audioCtxRef.current) audioCtxRef.current = new AC();
+      audioCtxRef.current?.resume();
+    } catch { /* audio not available */ }
     setStarted(true);
     const g = greeting(rules);
     setMsgs([{ from: "bot", text: g }]);
