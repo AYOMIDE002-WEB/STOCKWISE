@@ -111,6 +111,9 @@ export async function POST(req: NextRequest) {
       let lastStatus = 0;
       let lastDetail = "";
       let ok = false;
+      for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 1200)); // brief pause, then try again
+      tried.clear();
       for (const model of candidates) {
         if (tried.has(model)) continue;
         tried.add(model);
@@ -135,7 +138,9 @@ export async function POST(req: NextRequest) {
         }
         lastStatus = res.status;
         lastDetail = (await res.text()).slice(0, 200);
-        if (res.status !== 404 && res.status !== 400) break; // only a retired/unknown model is worth retrying
+        // retired model (404/400) or Google busy (429/500/503): try the next model
+        if (![404, 400, 429, 500, 503].includes(res.status)) break;
+      }
       }
       if (!ok) return NextResponse.json({ error: "ai_error", provider, status: lastStatus, detail: lastDetail }, { status: 502 });
     }
