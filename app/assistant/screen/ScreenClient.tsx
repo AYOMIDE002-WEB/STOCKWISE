@@ -9,6 +9,10 @@ import { respond, greeting, addLine, cartTotal, payable, type CartLine, type Pro
 type Msg = { from: "bot" | "me"; text: string };
 type QItem = { type: "order" | "event"; payload: any };
 
+// Set NEXT_PUBLIC_ASSISTANT_VOICE to "male" in Vercel for a male assistant voice.
+const VOICE = (process.env.NEXT_PUBLIC_ASSISTANT_VOICE || "female").toLowerCase() === "male" ? "male" : "female";
+const VOICE_HINT = VOICE === "male" ? /david|mark|guy|ryan|james|george|male/i : /zira|aria|jenny|hazel|susan|libby|natasha|samantha|female/i;
+
 const QKEY = "sw_screen_queue_v1";
 const loadQ = (): QItem[] => { try { return JSON.parse(localStorage.getItem(QKEY) || "[]"); } catch { return []; } };
 const saveQ = (q: QItem[]) => { try { localStorage.setItem(QKEY, JSON.stringify(q)); } catch { /* storage full or blocked */ } };
@@ -60,8 +64,13 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = lang;
+    const voices = window.speechSynthesis.getVoices();
     if (code !== "en") {
-      const v = window.speechSynthesis.getVoices().find((x) => x.lang.toLowerCase().startsWith(code));
+      const v = voices.find((x) => x.lang.toLowerCase().startsWith(code));
+      if (v) { u.voice = v; u.lang = v.lang; }
+    } else {
+      // keep the same male/female voice as the cloud voice where the device has one
+      const v = voices.find((x) => x.lang.toLowerCase().startsWith("en") && VOICE_HINT.test(x.name));
       if (v) { u.voice = v; u.lang = v.lang; }
     }
     window.speechSynthesis.speak(u);
@@ -72,7 +81,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
     try {
       const ctx = audioCtxRef.current;
       if (!ctx) return false;
-      const res = await fetch("/api/assistant/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+      const res = await fetch("/api/assistant/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, gender: VOICE }) });
       if (!res.ok) return false;
       const j = await res.json();
       const bin = atob(j.audio);

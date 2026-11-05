@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
   const text = String(body.text || "").trim().slice(0, 400);
   if (!text) return NextResponse.json({ error: "Empty text" }, { status: 400 });
 
+  const voiceName = process.env.GEMINI_TTS_VOICE || (body.gender === "male" ? "Charon" : "Kore");
   const models = [process.env.GEMINI_TTS_MODEL, workingTts, "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"].filter(Boolean) as string[];
   const tried = new Set<string>();
   let lastStatus = 0;
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
           contents: [{ parts: [{ text: `Say naturally: ${text}` }] }],
           generationConfig: {
             responseModalities: ["AUDIO"],
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
           },
         }),
       });
