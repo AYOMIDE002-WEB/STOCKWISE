@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Boxes, Mic, MicOff, Send, ShoppingBasket, Volume2, VolumeX, Plus, Minus, X, CheckCircle2, WifiOff, ShieldCheck, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabaseClient";
 import { guessLang, cleanForSpeech } from "@/lib/speechHelpers";
+import HologramView from "./HologramView";
 import { respond, greeting, addLine, cartTotal, payable, type CartLine, type Product, type Rules } from "@/lib/assistantEngine";
 
 type Msg = { from: "bot" | "me"; text: string };
@@ -27,7 +28,7 @@ const LANGS = [
   { code: "ig-NG", label: "Igbo (experimental)" },
 ];
 
-export default function ScreenClient({ initialProducts, initialRules }: { initialProducts: Product[]; initialRules: Rules }) {
+export default function ScreenClient({ initialProducts, initialRules, mode = "chat" }: { initialProducts: Product[]; initialRules: Rules; mode?: "chat" | "hologram" }) {
   const [supabase] = useState(() => createClient());
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [rules, setRules] = useState<Rules>(initialRules);
@@ -37,6 +38,8 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
   const [discount, setDiscount] = useState(0);
   const [aiOn, setAiOn] = useState(true);
   const [aiErr, setAiErr] = useState("");
+  const [speaking, setSpeaking] = useState(false);
+  const lastActRef = useRef(Date.now());
   const [thinking, setThinking] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
   const [pw, setPw] = useState("");
@@ -73,6 +76,10 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
       const v = voices.find((x) => x.lang.toLowerCase().startsWith("en") && VOICE_HINT.test(x.name));
       if (v) { u.voice = v; u.lang = v.lang; }
     }
+    u.onstart = () => setSpeaking(true);
+    u.onend = () => setSpeaking(false);
+    u.onerror = () => setSpeaking(false);
+    setTimeout(() => setSpeaking(false), 20000);
     window.speechSynthesis.speak(u);
   }, [lang]);
 
@@ -104,6 +111,8 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
       src.connect(ctx.destination);
       src.start();
       srcRef.current = src;
+      setSpeaking(true);
+      src.onended = () => setSpeaking(false);
       return true;
     } catch {
       return false;
@@ -186,6 +195,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
       audioCtxRef.current?.resume();
     } catch { /* audio not available */ }
     setStarted(true);
+    if (mode === "hologram") return; // the hologram greets when a customer arrives
     const g = greeting(rules);
     setMsgs([{ from: "bot", text: g }]);
     setMatches(products.slice(0, 6));
@@ -193,7 +203,21 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
     logEvent("greeting", "", g, false);
   }
 
+  function activity() { lastActRef.current = Date.now(); }
+
+  // A customer has arrived (sensed by the camera, or the demo button).
+  function arrive() {
+    if (Date.now() - lastActRef.current > 120000) { setCart([]); setDiscount(0); } // a new customer: fresh basket
+    activity();
+    const g = greeting(rules);
+    setMsgs([{ from: "bot", text: g }]);
+    setMatches(products.filter((x) => Number(x.quantity_in_stock) > 0).slice(0, 4));
+    say(g);
+    logEvent("greeting", "", g, false);
+  }
+
   async function send(text: string, alts: string[] = []) {
+    activity();
     const t = text.trim();
     if (!t || thinking) return;
     const history = msgs.slice(-8);
@@ -250,6 +274,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
   }
 
   function tapProduct(p: Product) {
+    activity();
     const res = addLine(cart, p, 1);
     const reply = res.ok ? `Added ${res.msg}. Total so far ${naira(payable(res.cart, discount))}.` : res.msg;
     setCart(res.cart);
@@ -312,7 +337,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
     const m = offline ? "Your order is saved and will be sent to the shop as soon as the internet returns." : `Thank you! Your order number is ${id}. Please pay ${naira(amount)} ${how}. Your order is confirmed once the shop sees your payment.`;
     say(m);
     setTimeout(() => {
-      setDone(null); setCart([]); setDiscount(0); setMsgs([]); setMatches([]); setForm({ name: "", phone: "", save: false, method: "counter" }); setStarted(false);
+      setDone(null); setCart([]); setDiscount(0); setMsgs([]); setMatches([]); setForm({ name: "", phone: "", save: false, method: "counter" }); if (mode !== "hologram") setStarted(false);
     }, 20000);
   }
 
@@ -325,11 +350,8 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
     window.location.href = "/assistant";
   }
 
-  const exitUi = (
+  const exitModal = (
     <>
-      <button onClick={() => { setExitOpen(true); setPw(""); setPwErr(""); }}
-        className="fixed bottom-3 right-3 z-40 w-9 h-9 rounded-full bg-white/60 border border-white text-slate-500 hover:text-slate-900 hover:bg-white flex items-center justify-center opacity-70 hover:opacity-100"
-        title="Owner exit" aria-label="Owner exit"><Lock size={16} /></button>
       {exitOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/30 backdrop-blur-sm">
           <form className="card !p-6 w-full max-w-sm !bg-white/85" onSubmit={(e) => { e.preventDefault(); ownerExit(); }}>
@@ -347,8 +369,115 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
     </>
   );
 
+  const exitUi = (
+    <>
+      <button onClick={() => { setExitOpen(true); setPw(""); setPwErr(""); }}
+        className="fixed bottom-3 right-3 z-40 w-9 h-9 rounded-full bg-white/60 border border-white text-slate-500 hover:text-slate-900 hover:bg-white flex items-center justify-center opacity-70 hover:opacity-100"
+        title="Owner exit" aria-label="Owner exit"><Lock size={16} /></button>
+      {exitModal}
+    </>
+  );
+
   const subtotal = cartTotal(cart);
   const total = payable(cart, discount);
+
+  const modals = (
+    <>
+      {/* Checkout */}
+      {checkout && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/30 backdrop-blur-sm">
+          <div className="card !p-6 w-full max-w-md !bg-white/80">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-slate-800">Place your order</h2>
+              <button onClick={() => setCheckout(false)} aria-label="Close"><X size={20} /></button>
+            </div>
+            <p className="text-sm text-slate-600 mb-3">Total: <b>{naira(total)}</b>{discount > 0 ? ` (after ${discount}% off)` : ""}</p>
+            <p className="text-xs font-medium text-slate-500 mb-1">How will you pay?</p>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {[{ k: "counter", l: "At the counter (cash / POS)" }, { k: "transfer", l: "Bank transfer" }].map((m) => (
+                <button type="button" key={m.k} onClick={() => setForm({ ...form, method: m.k })}
+                  className={`text-sm rounded-xl px-3 py-2 border ${form.method === m.k ? "bg-brand-500 text-white border-brand-500" : "bg-white/70 border-white text-slate-700"}`}>{m.l}</button>
+              ))}
+            </div>
+            {form.method === "transfer" && (
+              <p className="text-sm rounded-xl bg-white/80 border border-white p-3 mb-3 text-slate-900 font-bold whitespace-pre-line">
+                {rules.payment_instructions?.trim() || "Ask at the counter for the shop's account details."}
+              </p>
+            )}
+            <div className="space-y-2">
+              <input className="input-field w-full" placeholder="Your name (optional)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <input className="input-field w-full" placeholder="Phone number (optional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <label className="text-xs text-slate-600 flex items-start gap-2">
+                <input type="checkbox" className="mt-0.5" checked={form.save} onChange={(e) => setForm({ ...form, save: e.target.checked })} />
+                Save my name and number so the shop can recognise me next time.
+              </label>
+            </div>
+            {formError && <p className="text-sm text-rose-600 mt-2">{formError}</p>}
+            <button className="btn-primary w-full mt-4 !py-3" disabled={busy} onClick={placeOrder}>{busy ? "Sending..." : "Place order"}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Done */}
+      {done && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/30 backdrop-blur-sm">
+          <div className="card !p-8 max-w-md w-full text-center !bg-white/85">
+            <CheckCircle2 size={56} className="mx-auto text-emerald-500" />
+            <h2 className="text-2xl font-bold text-slate-800 mt-3">{done.offline ? "Order saved" : "Order placed"}</h2>
+            {!done.offline && <p className="text-3xl font-bold text-brand-600 mt-2">#{done.id}</p>}
+            {!done.offline && done.method === "transfer" && (
+              <p className="text-sm rounded-xl bg-white/80 border border-white p-3 mt-3 text-slate-900 font-bold whitespace-pre-line text-left">
+                {rules.payment_instructions?.trim() || "Ask at the counter for the shop's account details."}
+              </p>
+            )}
+            <p className="text-slate-600 mt-2">{done.offline ? "It will be sent to the shop as soon as the internet returns." : `Please pay ${naira(done.amount)} ${done.method === "transfer" ? "by bank transfer" : "at the counter"}. The shop confirms your order once payment is seen.`}</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  if (mode === "hologram") {
+    const lastBot = [...msgs].reverse().find((m) => m.from === "bot")?.text || "";
+    const lastMe = [...msgs].reverse().find((m) => m.from === "me")?.text || "";
+    return (
+      <HologramView
+        started={started}
+        onStart={begin}
+        onArrive={arrive}
+        onActivity={activity}
+        shopName={process.env.NEXT_PUBLIC_SHOP_NAME || "Our Shop"}
+        away={rules.away_mode}
+        online={online}
+        aiOn={aiOn}
+        aiErr={aiErr}
+        pending={pending}
+        active={msgs.length > 0}
+        speech={lastBot}
+        heard={lastMe}
+        matches={matches}
+        cart={cart}
+        total={total}
+        discount={discount}
+        listening={listening}
+        speaking={speaking}
+        thinking={thinking}
+        onSend={(t) => send(t)}
+        onMic={toggleMic}
+        onShowProducts={() => {
+          const top = products.filter((x) => Number(x.quantity_in_stock) > 0).slice(0, 4);
+          setMatches(top);
+          if (!msgs.length) arrive();
+          const m = "Here are some of our products. Ask about any item for its price and stock.";
+          setMsgs((cur) => [...cur, { from: "bot", text: m }]);
+          say(m);
+        }}
+        onCheckout={() => setCheckout(true)}
+        onOwnerExit={() => { setExitOpen(true); setPw(""); setPwErr(""); }}
+        extra={<>{exitModal}{modals}</>}
+      />
+    );
+  }
 
   // ---- start overlay (also unlocks speech in the browser)
   if (!started) {
@@ -467,57 +596,7 @@ export default function ScreenClient({ initialProducts, initialRules }: { initia
         </div>
       </div>
 
-      {/* Checkout */}
-      {checkout && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/30 backdrop-blur-sm">
-          <div className="card !p-6 w-full max-w-md !bg-white/80">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-slate-800">Place your order</h2>
-              <button onClick={() => setCheckout(false)} aria-label="Close"><X size={20} /></button>
-            </div>
-            <p className="text-sm text-slate-600 mb-3">Total: <b>{naira(total)}</b>{discount > 0 ? ` (after ${discount}% off)` : ""}</p>
-            <p className="text-xs font-medium text-slate-500 mb-1">How will you pay?</p>
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              {[{ k: "counter", l: "At the counter (cash / POS)" }, { k: "transfer", l: "Bank transfer" }].map((m) => (
-                <button type="button" key={m.k} onClick={() => setForm({ ...form, method: m.k })}
-                  className={`text-sm rounded-xl px-3 py-2 border ${form.method === m.k ? "bg-brand-500 text-white border-brand-500" : "bg-white/70 border-white text-slate-700"}`}>{m.l}</button>
-              ))}
-            </div>
-            {form.method === "transfer" && (
-              <p className="text-sm rounded-xl bg-white/80 border border-white p-3 mb-3 text-slate-900 font-bold whitespace-pre-line">
-                {rules.payment_instructions?.trim() || "Ask at the counter for the shop's account details."}
-              </p>
-            )}
-            <div className="space-y-2">
-              <input className="input-field w-full" placeholder="Your name (optional)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <input className="input-field w-full" placeholder="Phone number (optional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-              <label className="text-xs text-slate-600 flex items-start gap-2">
-                <input type="checkbox" className="mt-0.5" checked={form.save} onChange={(e) => setForm({ ...form, save: e.target.checked })} />
-                Save my name and number so the shop can recognise me next time.
-              </label>
-            </div>
-            {formError && <p className="text-sm text-rose-600 mt-2">{formError}</p>}
-            <button className="btn-primary w-full mt-4 !py-3" disabled={busy} onClick={placeOrder}>{busy ? "Sending..." : "Place order"}</button>
-          </div>
-        </div>
-      )}
-
-      {/* Done */}
-      {done && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/30 backdrop-blur-sm">
-          <div className="card !p-8 max-w-md w-full text-center !bg-white/85">
-            <CheckCircle2 size={56} className="mx-auto text-emerald-500" />
-            <h2 className="text-2xl font-bold text-slate-800 mt-3">{done.offline ? "Order saved" : "Order placed"}</h2>
-            {!done.offline && <p className="text-3xl font-bold text-brand-600 mt-2">#{done.id}</p>}
-            {!done.offline && done.method === "transfer" && (
-              <p className="text-sm rounded-xl bg-white/80 border border-white p-3 mt-3 text-slate-900 font-bold whitespace-pre-line text-left">
-                {rules.payment_instructions?.trim() || "Ask at the counter for the shop's account details."}
-              </p>
-            )}
-            <p className="text-slate-600 mt-2">{done.offline ? "It will be sent to the shop as soon as the internet returns." : `Please pay ${naira(done.amount)} ${done.method === "transfer" ? "by bank transfer" : "at the counter"}. The shop confirms your order once payment is seen.`}</p>
-          </div>
-        </div>
-      )}
+      {modals}
     </div>
   );
 }

@@ -139,6 +139,9 @@ export default function AssistantClient({ role }: { role: "Admin" | "Staff" }) {
           <a href="/assistant/screen" target="_blank" rel="noreferrer" className="btn-secondary inline-flex items-center gap-2">
             <Monitor size={16} /> Open customer screen
           </a>
+          <a href="/assistant/hologram" target="_blank" rel="noreferrer" className="btn-secondary inline-flex items-center gap-2">
+            <Monitor size={16} /> Open hologram screen
+          </a>
         </div>
       </div>
 
